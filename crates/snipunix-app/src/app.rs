@@ -9,8 +9,11 @@ use libadwaita as adw;
 use snipunix_capture::{
     CaptureBackend, CaptureError, CaptureOptions, CapturedImage, PortalScreenshot,
 };
-use snipunix_core::CaptureMapping;
-use snipunix_overlay::{OverlayResult, collect_monitors, layout_from_monitors, present};
+use snipunix_core::{CaptureMapping, ImageRect, LogicalRect};
+use snipunix_overlay::{
+    OverlayFrames, OverlayOptions, OverlayResult, collect_monitors, layout_from_monitors, present,
+    start_countdown,
+};
 
 use crate::cli::{CaptureTarget, Cli};
 use crate::shortcuts::{self, ShortcutEvent};
@@ -22,7 +25,10 @@ pub fn run(cli: Cli) -> glib::ExitCode {
     let initial = Rc::new(RefCell::new(Some(cli)));
 
     app.connect_activate(move |app| {
-        if app.active_window().is_some() {
+        if let Some(window) = app.active_window() {
+            // A second launch (or a hidden resident window) focuses the window
+            // that already exists instead of building a duplicate.
+            window.present();
             return;
         }
         let cli = initial.borrow_mut().take().unwrap_or_default();
@@ -31,6 +37,9 @@ pub fn run(cli: Cli) -> glib::ExitCode {
 
     app.set_accels_for_action("app.capture-region", &["<Control><Shift>s"]);
     app.set_accels_for_action("app.capture-screen", &["<Control><Shift>a"]);
+    app.set_accels_for_action("app.copy", &["<Control>c"]);
+    app.set_accels_for_action("app.save-as", &["<Control>s"]);
+    app.set_accels_for_action("app.quit", &["<Control>q"]);
     // Arguments are parsed by our own CLI; do not let GApplication interpret
     // application-specific flags such as `--capture`.
     app.run_with_args::<&str>(&["snipunix"])
@@ -68,11 +77,24 @@ struct AppState {
     busy: Cell<bool>,
     overlay_active: Cell<bool>,
     pending_output: RefCell<Option<PathBuf>>,
-    pending_capture: RefCell<Option<CapturedImage>>,
     exit_after: Cell<bool>,
     launch_target: Cell<Option<CaptureTarget>>,
     register_shortcuts_on_start: Cell<bool>,
     shortcut_registered: Cell<bool>,
+    current: RefCell<Option<CapturedImage>>,
+    last_region: RefCell<Option<RegionContext>>,
+    clipboard_owned: Cell<bool>,
+    delay: Cell<u32>,
+    preview_bar: gtk::Box,
+    copy_button: gtk::Button,
+    save_button: gtk::Button,
+    adjust_button: gtk::Button,
+}
+
+#[derive(Clone)]
+struct RegionContext {
+    full: CapturedImage,
+    logical: LogicalRect,
 }
 
 impl AppState {
@@ -155,7 +177,40 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     screen_button.set_tooltip_text(Some("Capture the entire desktop"));
     action_bar.append(&region_button);
     action_bar.append(&screen_button);
+
+    let delay_label = gtk::Label::new(Some("Delay"));
+    delay_label.add_css_class("dim-label");
+    delay_label.set_margin_start(12);
+    let delay_spin = gtk::SpinButton::with_range(0.0, 10.0, 1.0);
+    delay_spin.set_value(f64::from(cli.delay));
+    delay_spin.set_tooltip_text(Some("Seconds to wait before freezing the screen"));
+    delay_spin.set_width_chars(2);
+    action_bar.append(&delay_label);
+    action_bar.append(&delay_spin);
     content.append(&action_bar);
+
+    let preview_bar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    preview_bar.set_margin_start(12);
+    preview_bar.set_margin_end(12);
+    preview_bar.set_margin_bottom(6);
+    let copy_button = gtk::Button::with_label("Copy");
+    copy_button.set_action_name(Some("app.copy"));
+    copy_button.set_tooltip_text(Some("Copy the captured image to the clipboard"));
+    let save_button = gtk::Button::with_label("Save As…");
+    save_button.set_action_name(Some("app.save-as"));
+    save_button.set_tooltip_text(Some("Save the captured image as a PNG"));
+    let adjust_button = gtk::Button::with_label("Adjust Region");
+    adjust_button.set_action_name(Some("app.adjust"));
+    adjust_button.set_sensitive(false);
+    copy_button.set_sensitive(false);
+    save_button.set_sensitive(false);
+    adjust_button.set_tooltip_text(Some(
+        "Reopen the selection overlay to adjust the last region",
+    ));
+    preview_bar.append(&copy_button);
+    preview_bar.append(&save_button);
+    preview_bar.append(&adjust_button);
+    preview_bar.set_visible(false);
 
     let stack = gtk::Stack::builder()
         .transition_type(gtk::StackTransitionType::Crossfade)
@@ -192,6 +247,7 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     stack.add_named(&image_box, Some("image"));
     stack.set_visible_child_name("empty");
     content.append(&stack);
+    content.append(&preview_bar);
 
     let status_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     status_box.set_margin_top(4);
@@ -216,7 +272,7 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     toast_overlay.set_child(Some(&toolbar_view));
     window.set_content(Some(&toast_overlay));
 
-    Rc::new(AppState {
+    let state = Rc::new(AppState {
         app: app.clone(),
         window,
         toast_overlay,
@@ -227,12 +283,45 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
         busy: Cell::new(false),
         overlay_active: Cell::new(false),
         pending_output: RefCell::new(cli.output),
-        pending_capture: RefCell::new(None),
         exit_after: Cell::new(cli.exit_after),
         launch_target: Cell::new(cli.target),
         register_shortcuts_on_start: Cell::new(cli.register_shortcuts),
         shortcut_registered: Cell::new(false),
-    })
+        current: RefCell::new(None),
+        last_region: RefCell::new(None),
+        clipboard_owned: Cell::new(false),
+        delay: Cell::new(cli.delay),
+        preview_bar,
+        copy_button,
+        save_button,
+        adjust_button,
+    });
+
+    let delay_state = Rc::downgrade(&state);
+    delay_spin.connect_value_changed(move |spin| {
+        if let Some(state) = delay_state.upgrade() {
+            state.delay.set(spin.value_as_int().clamp(0, 10) as u32);
+        }
+    });
+
+    // Keep the process alive while Snipunix owns the clipboard. The image is
+    // served from this process; closing the window only hides it. Quit remains
+    // available from the menu or Ctrl+Q.
+    let close_state = Rc::downgrade(&state);
+    state.window.connect_close_request(move |window| {
+        if let Some(state) = close_state.upgrade() {
+            if state.clipboard_owned.get() && !state.exit_after.get() {
+                window.set_visible(false);
+                state.set_status(
+                    "Snipunix is still running so the copied image stays on the clipboard.                      Use Quit to exit.",
+                );
+                return glib::Propagation::Stop;
+            }
+        }
+        glib::Propagation::Proceed
+    });
+
+    state
 }
 
 fn install_actions(state: &Rc<AppState>) {
@@ -258,6 +347,18 @@ fn install_actions(state: &Rc<AppState>) {
         let state = Rc::clone(state);
         move || show_about(&state)
     });
+    add_action(app, "copy", {
+        let state = Rc::clone(state);
+        move || copy_current(&state)
+    });
+    add_action(app, "save-as", {
+        let state = Rc::clone(state);
+        move || save_as(&state)
+    });
+    add_action(app, "adjust", {
+        let state = Rc::clone(state);
+        move || adjust_region(&state)
+    });
     add_action(app, "quit", {
         let app = app.clone();
         move || app.quit()
@@ -278,22 +379,55 @@ fn start_capture(state: &Rc<AppState>, target: CaptureTarget) {
         state.toast("A capture is already in progress.");
         return;
     }
-    state.set_busy(true);
-    state.set_status("Requesting a screenshot from the desktop portal…");
+    let delay = state.delay.get();
+    if delay == 0 {
+        request_capture(state, target);
+        return;
+    }
 
-    let window = state.window.clone();
+    state.set_busy(true);
+    state.set_status(format!("Capturing in {delay} seconds…"));
+    let countdown_state = Rc::clone(state);
+    let result = start_countdown(&state.app, delay, move |completed| {
+        countdown_state.set_busy(false);
+        if completed {
+            request_capture(&countdown_state, target);
+        } else {
+            countdown_state.set_status("Capture cancelled.");
+            countdown_state.quit_if_requested();
+        }
+    });
+    if let Err(error) = result {
+        state.set_busy(false);
+        let message = format!("Could not start the countdown: {error}");
+        state.set_status(&message);
+        state.toast(&message);
+    }
+}
+
+fn request_capture(state: &Rc<AppState>, target: CaptureTarget) {
+    if state.busy.get() || state.overlay_active.get() {
+        state.toast("A capture is already in progress.");
+        return;
+    }
+    state.set_busy(true);
+    state.set_status("Freezing the screen through the desktop portal…");
+    // Hide the app window so it is not part of its own screenshot. The picture
+    // is shown again once the capture or overlay session finishes.
+    state.window.set_visible(false);
+
     let state = Rc::clone(state);
     glib::spawn_future_local(async move {
-        let parent = if window.is_realized() {
-            ashpd::WindowIdentifier::from_native(&window).await
-        } else {
-            None
-        };
+        // Let the compositor remove our window before the portal captures.
+        glib::timeout_future(std::time::Duration::from_millis(180)).await;
+        // The window is hidden at this point, so it cannot be used as a portal
+        // parent (its xdg-foreign handle would be gone); the portal dialog is
+        // still shown by the compositor when permission is required.
         let backend = PortalScreenshot::default();
         let result = backend
             .capture(CaptureOptions {
                 interactive: false,
-                parent,
+                parent: None,
             })
             .await;
         state.set_busy(false);
@@ -305,25 +439,41 @@ fn start_capture(state: &Rc<AppState>, target: CaptureTarget) {
 }
 
 fn handle_capture(state: &Rc<AppState>, image: CapturedImage, target: CaptureTarget) {
+    state.window.present();
     match target {
         CaptureTarget::Screen => {
             state.display(&image);
-            state.set_status(format!(
-                "Captured the full desktop ({} × {}).",
-                image.width(),
-                image.height()
-            ));
+            state.current.replace(Some(image.clone()));
+            state.last_region.borrow_mut().take();
+            state.preview_bar.set_visible(true);
+            state.copy_button.set_sensitive(true);
+            state.save_button.set_sensitive(true);
+            state.adjust_button.set_sensitive(false);
+            let copied = copy_to_clipboard(state, &image);
+            state.set_status(if copied {
+                format!(
+                    "Captured the full desktop ({} × {}) and copied it to the clipboard.",
+                    image.width(),
+                    image.height()
+                )
+            } else {
+                format!(
+                    "Captured the full desktop ({} × {}).",
+                    image.width(),
+                    image.height()
+                )
+            });
             save_pending(state, &image);
             state.quit_if_requested();
         }
         CaptureTarget::Region => {
-            state.pending_capture.replace(Some(image));
-            begin_overlay(state);
+            begin_overlay(state, image, OverlayOptions::default());
         }
     }
 }
 
 fn handle_capture_error(state: &Rc<AppState>, error: &CaptureError) {
+    state.window.present();
     let message = match error {
         CaptureError::Cancelled | CaptureError::CancelledWithDetail(_) => {
             "Capture cancelled.".to_string()
@@ -353,14 +503,11 @@ fn handle_capture_error(state: &Rc<AppState>, error: &CaptureError) {
     state.quit_if_requested();
 }
 
-fn begin_overlay(state: &Rc<AppState>) {
-    let Some(full) = state.pending_capture.borrow().clone() else {
-        state.toast("No captured image is available.");
-        return;
-    };
+fn begin_overlay(state: &Rc<AppState>, full: CapturedImage, options: OverlayOptions) {
     let monitors = match collect_monitors() {
         Ok(monitors) => monitors,
         Err(error) => {
+            state.window.present();
             state.toast(format!("Could not read the monitor layout: {error}"));
             return;
         }
@@ -368,6 +515,7 @@ fn begin_overlay(state: &Rc<AppState>) {
     let layout = match layout_from_monitors(&monitors) {
         Ok(layout) => layout,
         Err(error) => {
+            state.window.present();
             state.toast(format!("Could not build the monitor layout: {error}"));
             return;
         }
@@ -375,62 +523,225 @@ fn begin_overlay(state: &Rc<AppState>) {
     let mapping = match CaptureMapping::new(layout.bounding_box(), full.size()) {
         Ok(mapping) => mapping,
         Err(error) => {
+            state.window.present();
             state.toast(format!("Could not map the captured image: {error}"));
             return;
         }
     };
+    let frames = overlay_frames(&full, &monitors, &mapping);
 
-    let texture = texture_from_image(&full);
     state.overlay_active.set(true);
-    state.set_status("Drag to select a region; release captures it. Escape cancels.");
+    state.set_status(if options.auto_commit_on_release {
+        "Drag to select a region; release captures it. Escape cancels."
+    } else {
+        "Drag the handles or move the selection, then press Enter or Ctrl+C to copy. \
+         Escape clears the selection."
+    });
 
     let state_done = Rc::clone(state);
-    let presented = present(&state.app, texture, mapping, monitors, move |result| {
-        state_done.overlay_active.set(false);
-        let full = state_done.pending_capture.borrow_mut().take();
-        match result {
-            OverlayResult::Selected { image, .. } => {
-                let Some(full) = full else {
-                    state_done.toast("The captured image is no longer available.");
-                    return;
-                };
-                tracing::debug!(?image, "cropping selected region");
-                match full.crop(image) {
-                    Ok(cropped) => {
-                        tracing::debug!(
-                            width = cropped.width(),
-                            height = cropped.height(),
-                            "cropped selected region"
-                        );
-                        state_done.display(&cropped);
-                        state_done.set_status(format!(
-                            "Selected region ({} × {}).",
-                            cropped.width(),
-                            cropped.height()
-                        ));
-                        save_pending(&state_done, &cropped);
-                    }
-                    Err(error) => {
-                        tracing::warn!(%error, "could not crop the region");
-                        state_done.toast(format!("Could not crop the region: {error}"));
-                    }
+    let presented = present(
+        &state.app,
+        frames,
+        mapping,
+        monitors,
+        options,
+        move |result| {
+            state_done.overlay_active.set(false);
+            state_done.window.present();
+            match result {
+                OverlayResult::Selected { logical, image } => {
+                    commit_region(&state_done, &full, logical, image);
+                }
+                OverlayResult::Cancelled => {
+                    state_done.set_status(if options.auto_commit_on_release {
+                        "Selection cancelled."
+                    } else {
+                        "Adjustment cancelled."
+                    });
                 }
             }
-            OverlayResult::Cancelled => {
-                state_done.set_status("Selection cancelled.");
-            }
-        }
-        state_done.quit_if_requested();
-    });
+            state_done.quit_if_requested();
+        },
+    );
 
     if let Err(error) = presented {
         state.overlay_active.set(false);
+        state.window.present();
         state.toast(format!("Could not open the selection overlay: {error}"));
     }
 }
 
+fn overlay_frames(
+    full: &CapturedImage,
+    monitors: &[snipunix_overlay::OverlayMonitor],
+    mapping: &CaptureMapping,
+) -> OverlayFrames {
+    let full_texture = texture_from_image(full);
+    let mut per_monitor = Vec::with_capacity(monitors.len());
+    for monitor in monitors {
+        let texture = mapping
+            .image_rect_for_monitor(&monitor.geometry)
+            .and_then(|rect| full.crop(rect).ok())
+            .map(|image| texture_from_image(&image));
+        per_monitor.push(texture);
+    }
+    OverlayFrames {
+        full: full_texture,
+        per_monitor,
+    }
+}
+
+fn commit_region(
+    state: &Rc<AppState>,
+    full: &CapturedImage,
+    logical: LogicalRect,
+    image: ImageRect,
+) {
+    tracing::debug!(?logical, ?image, "cropping selected region");
+    match full.crop(image) {
+        Ok(cropped) => {
+            tracing::debug!(
+                width = cropped.width(),
+                height = cropped.height(),
+                "cropped selected region"
+            );
+            state.window.present();
+            state.display(&cropped);
+            state.current.replace(Some(cropped.clone()));
+            state.last_region.replace(Some(RegionContext {
+                full: full.clone(),
+                logical,
+            }));
+            state.preview_bar.set_visible(true);
+            state.copy_button.set_sensitive(true);
+            state.save_button.set_sensitive(true);
+            state.adjust_button.set_sensitive(true);
+            let copied = copy_to_clipboard(state, &cropped);
+            state.set_status(if copied {
+                format!(
+                    "Selected region ({} × {}) and copied it to the clipboard.",
+                    cropped.width(),
+                    cropped.height()
+                )
+            } else {
+                format!(
+                    "Selected region ({} × {}).",
+                    cropped.width(),
+                    cropped.height()
+                )
+            });
+            save_pending(state, &cropped);
+        }
+        Err(error) => {
+            tracing::warn!(%error, "could not crop the region");
+            state.toast(format!("Could not crop the region: {error}"));
+        }
+    }
+}
+
+fn copy_to_clipboard(state: &AppState, image: &CapturedImage) -> bool {
+    let Some(display) = gdk::Display::default() else {
+        state.toast("Could not access the display clipboard.");
+        return false;
+    };
+    let texture = texture_from_image(image);
+    display.clipboard().set_texture(&texture);
+    state.clipboard_owned.set(true);
+    tracing::info!(
+        width = image.width(),
+        height = image.height(),
+        "copied image to clipboard"
+    );
+    true
+}
+
+fn copy_current(state: &Rc<AppState>) {
+    let Some(image) = state.current.borrow().clone() else {
+        state.toast("There is no captured image to copy yet.");
+        return;
+    };
+    if copy_to_clipboard(state, &image) {
+        state.set_status(format!(
+            "Copied {} × {} to the clipboard.",
+            image.width(),
+            image.height()
+        ));
+    }
+}
+
+fn save_as(state: &Rc<AppState>) {
+    let Some(image) = state.current.borrow().clone() else {
+        state.toast("There is no captured image to save yet.");
+        return;
+    };
+    let dialog = gtk::FileDialog::builder()
+        .title("Save screenshot")
+        .initial_name(default_file_name())
+        .build();
+    let state = Rc::clone(state);
+    let parent = state.window.clone();
+    dialog.save(
+        Some(&parent),
+        None::<&gio::Cancellable>,
+        move |result| match result {
+            Ok(file) => {
+                let Some(path) = file.path() else {
+                    state.toast("The selected location is not a local file.");
+                    return;
+                };
+                match image.save_png(&path) {
+                    Ok(()) => {
+                        tracing::info!(path = %path.display(), "saved PNG");
+                        let message = format!("Saved PNG to {}", path.display());
+                        state.set_status(&message);
+                        state.toast(&message);
+                    }
+                    Err(error) => {
+                        let message = format!("Could not save PNG to {}: {error}", path.display());
+                        state.toast(&message);
+                    }
+                }
+            }
+            Err(error) => {
+                if !error.matches(gtk::DialogError::Dismissed) {
+                    state.toast(format!("Could not choose a save location: {error}"));
+                }
+            }
+        },
+    );
+}
+
+fn default_file_name() -> String {
+    let stamp = glib::DateTime::now_local()
+        .ok()
+        .and_then(|date| date.format("%Y%m%d-%H%M%S").ok())
+        .map_or_else(|| "screenshot".to_string(), |value| value.to_string());
+    format!("snipunix-{stamp}.png")
+}
+
+fn adjust_region(state: &Rc<AppState>) {
+    if state.busy.get() || state.overlay_active.get() {
+        state.toast("A capture is already in progress.");
+        return;
+    }
+    let Some(context) = state.last_region.borrow().clone() else {
+        state.toast("There is no region to adjust.");
+        return;
+    };
+    begin_overlay(
+        state,
+        context.full,
+        OverlayOptions {
+            auto_commit_on_release: false,
+            initial_selection: Some(context.logical),
+            magnifier: true,
+        },
+    );
+}
+
 fn save_pending(state: &AppState, image: &CapturedImage) -> bool {
-    let Some(path) = state.pending_output.borrow_mut().take() else {
+    // Keep the path: an adjusted selection must overwrite the same file.
+    let Some(path) = state.pending_output.borrow().clone() else {
         return false;
     };
     match image.save_png(&path) {
@@ -445,7 +756,6 @@ fn save_pending(state: &AppState, image: &CapturedImage) -> bool {
             tracing::warn!(%error, path = %path.display(), "could not save PNG");
             let message = format!("Could not save PNG to {}: {error}", path.display());
             state.toast(&message);
-            state.pending_output.replace(Some(path));
             false
         }
     }

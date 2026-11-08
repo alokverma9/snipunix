@@ -3,22 +3,30 @@
 **Screenshot. Annotate. Share.**
 
 Snipunix is a Linux screenshot tool built for GNOME Wayland. This repository is
-the **M0 prototype**: portal capture, a frozen-image region-selection overlay,
-PNG saving, and a GlobalShortcuts portal spike. Annotation, OCR, sharing,
-recording, and cloud features are not part of M0.
+the **M1 prototype**: portal capture, a frozen-image region overlay with
+move/resize handles, a magnifier, a delay countdown, clipboard copy, Save As,
+and Adjust Region. Annotation, OCR, sharing, recording, and cloud features are
+not part of M1.
 
 ## Status
 
-| Area | M0 state |
+| Area | M1 state |
 | --- | --- |
 | Full-screen capture | Works through `org.freedesktop.portal.Screenshot` v2 |
 | Headless CLI capture | `snipunix --capture screen --output PATH` |
-| Region selection | Frozen desktop, one fullscreen window per monitor, auto-capture on mouse release |
+| Region selection | Frozen desktop, one fullscreen window per monitor, capture on mouse release |
+| Move / resize | Eight handles, inside-drag move, keyboard nudge, minimum 8×8 logical px |
+| Magnifier | 8× nearest-neighbour while dragging or resizing |
+| Delay | `--delay 0..10` and a GUI spin button; countdown can be cancelled |
+| Clipboard | Crop is copied automatically on capture |
+| Preview actions | Copy, Save As…, Adjust Region |
+| Adjust | Reopens the overlay with the previous rectangle and handles; Enter / Ctrl+C confirms |
 | Cancel | Escape, right-click |
-| Saving | `--output PATH`; the GUI displays the result but has no Save dialog yet |
+| Saving | `--output PATH` and a GUI Save As dialog |
+| Resident window | Closing the window hides it while Snipunix owns the clipboard; Quit exits |
 | Global shortcuts | Prototype, registered at runtime through the GlobalShortcuts portal |
-| Flatpak | Minimal manifest and build instructions in `flatpak/` |
-| Annotation / OCR / QR / recording / audio | Not implemented (M1+) |
+| Flatpak | Manifest, offline source list, and a verified M1 build |
+| Annotation / OCR / QR / recording / audio | Not implemented (M2+) |
 
 Tested on Ubuntu 26.04, GNOME 50.1, Wayland, one 1920×1080 monitor. See
 [Known limitations](#known-limitations) before relying on any behaviour.
@@ -48,6 +56,9 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
+M1 has **44 passing tests**: 29 core, 8 capture, 5 app, 2 overlay. See
+[docs/M1_TEST_EVIDENCE.md](docs/M1_TEST_EVIDENCE.md).
+
 ## Run
 
 Launch the GUI:
@@ -68,6 +79,12 @@ Capture a region from the GUI overlay and save it:
 ./target/debug/snipunix --capture region --output /tmp/snipunix-region.png
 ```
 
+Wait five seconds before freezing the screen:
+
+```sh
+./target/debug/snipunix --capture region --delay 5
+```
+
 Show portal capabilities:
 
 ```sh
@@ -80,22 +97,55 @@ Register the prototype global shortcuts:
 ./target/debug/snipunix --register-shortcuts
 ```
 
+### Capture workflow
+
+1. Drag a rectangle. The frozen overlay dims the desktop and restores the
+   selected pixels; a badge reports the crop size.
+2. Release the primary button. Snipunix crops the region, copies it to the
+   clipboard, optionally saves it (`--output`), and shows a preview with
+   **Copy**, **Save As…**, and **Adjust Region**.
+3. If the selection is not right, choose **Adjust Region**. The overlay reopens
+   with the previous rectangle; move or resize it, then press Enter or Ctrl+C.
+   The adjusted crop replaces the preview and the clipboard contents, and
+   overwrites the same `--output` file if one was supplied.
+
+Full-screen captures show Copy and Save As… but Adjust Region is disabled
+because there is no region context.
+
 ### Overlay controls
 
 | Input | Action |
 | --- | --- |
-| Drag with the primary button | Draw the selection rectangle |
-| Release the primary button | Capture the selection immediately |
-| Escape | Cancel the overlay (during a drag the first Escape clears the rectangle) |
-| Right-click | Cancel the overlay |
+| Drag with the primary button | Draw a new selection |
+| Release the primary button | Capture immediately (normal capture flow) |
+| Drag inside an existing selection | Move it (Adjust mode) |
+| Drag one of the eight handles | Resize (Adjust mode) |
+| Arrow keys / Shift+arrow | Nudge by 1 px / 10 px (Adjust mode) |
+| Enter, Ctrl+C, or double-click | Copy the selection (Adjust mode) |
+| Escape | Clear a selected rectangle; from Idle/Dragging, cancel |
+| Right-click | Cancel |
+| Click / Escape during countdown | Cancel the delayed capture |
 
-The overlay shows a frozen copy of the desktop, dims it, and restores the
-undimmed image inside the selection. A size badge reports the crop in captured
-image pixels. The image used by the overlay is the same portal capture that is
-cropped on release, so what you select is what you save.
+A new drag is captured on release to match Windows Snipping Tool. Handles and
+move are available while adjusting a finished capture, and while dragging a new
+selection before release.
 
-Enter and double-click are still wired as defensive confirmations, but a normal
-drag captures on release and the `Selected` state is transient.
+### Preview and clipboard
+
+- **Copy** (Ctrl+C) copies the current crop again.
+- **Save As…** (Ctrl+S) opens a native PNG save dialog with a timestamped name.
+- **Adjust Region** reopens the frozen overlay for the last region.
+- The crop is copied automatically after every capture and adjustment.
+- Snipunix stays resident while it owns the clipboard: closing the main window
+  hides it instead of exiting. Use the menu **Quit** or Ctrl+Q to exit and
+  release the clipboard.
+
+### Delay
+
+`--delay 0..10` (and the toolbar spin button) starts a transparent fullscreen
+countdown on the primary monitor. The countdown is destroyed before the portal
+request, so it cannot appear in the screenshot. Clicking the countdown or
+pressing Escape cancels without taking a screenshot.
 
 ## Portal permissions
 
@@ -108,6 +158,9 @@ panicking:
 - `Cancelled` / `CancelledWithDetail`
 - `PortalUnavailable`
 - `Timeout` (15 seconds)
+
+Snipunix hides its own window before requesting the capture and waits 180 ms so
+the compositor removes it; the app window does not appear in the screenshot.
 
 The Screenshot portal writes a temporary `Screenshot-*.png` file (usually in
 `~/Pictures`). Snipunix reads it, removes it when the path looks like a
@@ -144,7 +197,7 @@ In testing GNOME accepted both bindings and delivered them while another window
 was focused. **The shortcuts are session-scoped:** closing Snipunix stops the
 listener, so they only work while the application is running. Persistent
 shortcuts that launch a closed application need a background/autostart service,
-which is outside M0.
+which is outside M1.
 
 Inside Flatpak the app ID comes from the sandbox; host registration is skipped.
 
@@ -190,16 +243,21 @@ portal. In the sandbox the portal returns a document-portal path such as
 best-effort deletion logs a warning and the document portal manages its
 lifetime.
 
+M1 was built and installed as version 0.2.0. A sandboxed region drag produced a
+600×400 PNG. Stop any host `snipunix` process before launching the Flatpak: both
+use the same application ID, so the host instance would receive the activation.
+
 ## Repository layout
 
 ```text
 crates/snipunix-core      Geometry, monitor layout, coordinate mapping,
-                          selection state machine, RGBA crop
+                          selection state machine (move/resize/nudge), RGBA crop
 crates/snipunix-capture   Portal screenshot backend, URI handling, PNG decode,
                           portal probe
 crates/snipunix-overlay   GDK monitor discovery, fullscreen overlay windows,
-                          GSK renderer and input
-crates/snipunix-app       CLI, libadwaita shell, capture flow, shortcuts
+                          GSK renderer, handles, magnifier, countdown
+crates/snipunix-app       CLI, libadwaita shell, preview bar, clipboard,
+                          Save As, Adjust Region, shortcuts
 data/                     Desktop entry, AppStream metadata, icon
 flatpak/                  Manifest and Cargo source generator
 docs/                     Architecture, dependencies, test evidence
@@ -210,34 +268,37 @@ docs/                     Architecture, dependencies, test evidence
 - **One monitor was available for live testing.** Per-monitor windows and
   virtual-desktop coordinates are implemented, but multi-monitor and mixed-DPI
   behaviour were not exercised on hardware. Do not treat them as validated.
-- The portal does not report monitor geometry. M0 derives one uniform scale per
+- The portal does not report monitor geometry. M1 derives one uniform scale per
   axis from the GDK bounding box and the image size. Mixed-DPI desktops can
   therefore crop incorrectly.
-- The overlay uses one fullscreen window per monitor. Dragging across monitors
-  and hotplug during a selection are not handled.
-- There is no move/resize of an existing selection, magnifier, countdown,
-  window snap, keyboard nudging, or toolbar.
-- The GUI has no Save dialog. Use `--output PATH` to write a PNG; otherwise the
-  crop is only displayed.
-- The app quits when its last window closes, so global shortcuts do not survive
-  closing the app. They also must be registered again after a restart.
+- Monitor hotplug cancels the overlay in code, but hotplug could not be
+  triggered for evidence.
+- Window mode (snap-to-content) is not implemented; M1 supports region and
+  screen capture only.
+- The countdown is shown on the primary monitor only.
+- The clipboard is owned by the process. Quitting Snipunix releases the
+  clipboard; closing the window only hides it.
 - A second `--capture region` launch while Snipunix is already running activates
   the existing window instead of starting a new capture; the arguments of the
   second process are not forwarded. Headless `--capture screen --output` is
   unaffected because it does not start GTK.
+- Global shortcuts stop working when the app process exits. Registration is
+  session-scoped; there is no background service or autostart entry.
 - The Flatpak build was validated on this host; other runtimes and distributions
   are untested.
-- X11 is only a fallback socket in the manifest. The M0 overlay was tested on
-  Wayland; X11 interaction was not validated on a real session.
-- Escape and drag/release were exercised manually. Automated tests cover the
-  pure geometry, selection, URI, and CLI logic, not compositor interaction.
+- X11 is only a fallback socket in the manifest. M1 was tested on Wayland; X11
+  interaction was not validated on a real session.
+- Automated tests cover pure logic and real host interaction through `ydotool`;
+  they do not cover every compositor/portal version.
 
 ## Documentation
 
-- [M0 architecture](docs/M0_ARCHITECTURE.md)
-- [M0 test evidence](docs/M0_TEST_EVIDENCE.md)
+- [M1 architecture](docs/M1_ARCHITECTURE.md)
+- [M1 test evidence](docs/M1_TEST_EVIDENCE.md)
+- [M1 completion report](M1_COMPLETION_REPORT.md)
+- [M0 architecture](docs/M0_ARCHITECTURE.md) and
+  [M0 test evidence](docs/M0_TEST_EVIDENCE.md) (historical)
 - [Dependencies and licenses](docs/DEPENDENCIES.md)
-- [M0 completion report](M0_COMPLETION_REPORT.md)
 - Phase 0 research reports remain in `research/`.
 
 ## License

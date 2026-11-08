@@ -18,6 +18,8 @@ pub struct Cli {
     pub exit_after: bool,
     pub register_shortcuts: bool,
     pub portal_info: bool,
+    /// Countdown in seconds (0–10) before the screen is frozen.
+    pub delay: u32,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -38,6 +40,20 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<ParseResult, Stri
             "--exit" => cli.exit_after = true,
             "--register-shortcuts" => cli.register_shortcuts = true,
             "--portal-info" => cli.portal_info = true,
+            "--delay" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--delay requires a number of seconds (0–10)".to_string())?;
+                let seconds: u32 = value.parse().map_err(|_| {
+                    format!("invalid delay '{value}'; expected a whole number from 0 to 10")
+                })?;
+                if seconds > 10 {
+                    return Err(format!(
+                        "delay {seconds} is out of range; expected 0 to 10 seconds"
+                    ));
+                }
+                cli.delay = seconds;
+            }
             "--capture" => {
                 let value = args
                     .next()
@@ -74,6 +90,7 @@ USAGE:
 OPTIONS:
     --capture <screen|region>   Capture immediately after startup.
     -o, --output <PATH>         Write the resulting PNG to PATH.
+    --delay <SECONDS>           Wait 0–10 seconds before capturing (default 0).
     --exit                      Quit after the capture completes.
     --register-shortcuts        Register global shortcuts through the portal.
     --portal-info               Print Screenshot portal capabilities and exit.
@@ -84,6 +101,7 @@ EXAMPLES:
     snipunix
     snipunix --capture screen --output /tmp/snipunix-screen.png
     snipunix --capture region --output /tmp/snipunix-region.png
+    snipunix --capture region --delay 5
 ";
 
 #[cfg(test)]
@@ -121,6 +139,18 @@ mod tests {
         assert!(parse_args(&["--output"]).is_err());
         assert!(parse_args(&["--nope"]).is_err());
         assert!(parse_args(&["--capture", "window"]).is_err());
+    }
+
+    #[test]
+    fn parses_delay_and_rejects_out_of_range_values() {
+        let ParseResult::Run(cli) = parse_args(&["--capture", "region", "--delay", "5"]).unwrap()
+        else {
+            panic!("expected run");
+        };
+        assert_eq!(cli.delay, 5);
+        assert!(parse_args(&["--delay", "11"]).is_err());
+        assert!(parse_args(&["--delay", "-1"]).is_err());
+        assert!(parse_args(&["--delay", "abc"]).is_err());
     }
 
     #[test]

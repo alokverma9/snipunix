@@ -1217,7 +1217,7 @@ checksum = "149309498a5f7334b12ddae0cad8aba81ce785fe91755068867e017cf98fee46"
 
 [[package]]
 name = "snipunix-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "ashpd",
@@ -1241,7 +1241,7 @@ dependencies = [
 
 [[package]]
 name = "snipunix-capture"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ashpd",
  "async-io",
@@ -1255,16 +1255,17 @@ dependencies = [
 
 [[package]]
 name = "snipunix-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "snipunix-overlay"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "gdk4",
+ "gio",
  "glib",
  "gtk4",
  "snipunix-core",

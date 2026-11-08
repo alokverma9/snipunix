@@ -1,8 +1,9 @@
 # Dependencies and licenses
 
 Snipunix uses a deliberately small direct dependency set. Versions are pinned in
-`Cargo.toml`; the full transitive graph (179 locked packages) is recorded in
-`Cargo.lock`.
+`Cargo.toml`; the full transitive graph is recorded in `Cargo.lock`. M1 added no
+new direct dependencies (the overlay crate now also uses the existing `gio`
+workspace dependency for monitor-list change signals).
 
 ## Direct Rust dependencies
 
@@ -11,7 +12,7 @@ Snipunix uses a deliberately small direct dependency set. Versions are pinned in
 | `gtk4` | 0.11.5 | MIT | GTK 4 bindings for the shell and overlay widgets |
 | `gdk4` | 0.11.5 | MIT | Displays, monitors, textures, input constants |
 | `glib` | 0.22.10 | MIT | GLib types, main-loop integration, markup escaping |
-| `gio` | 0.22.10 | MIT | `GApplication` actions, menus |
+| `gio` | 0.22.10 | MIT | `GApplication` actions and menus; overlay monitor-list signals |
 | `libadwaita` | 0.9.2 | MIT (Rust bindings) | GNOME shell widgets; the libadwaita library itself is LGPL-2.1-or-later |
 | `ashpd` | 0.14.0 | MIT | Screenshot and GlobalShortcuts portal clients |
 | `image` | 0.25.10 | MIT OR Apache-2.0 | PNG decode/encode |
