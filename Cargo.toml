@@ -1,0 +1,47 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/snipunix-core",
+    "crates/snipunix-capture",
+    "crates/snipunix-overlay",
+    "crates/snipunix-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+authors = ["Snipunix contributors"]
+repository = "https://github.com/alokverma9/snipunix"
+
+[workspace.dependencies]
+snipunix-core = { path = "crates/snipunix-core" }
+snipunix-capture = { path = "crates/snipunix-capture" }
+snipunix-overlay = { path = "crates/snipunix-overlay" }
+
+gtk = { package = "gtk4", version = "0.11.5", features = ["v4_12"] }
+gdk = { package = "gdk4", version = "0.11.5" }
+glib = "0.22.10"
+gio = "0.22.10"
+libadwaita = { version = "0.9.2", features = ["v1_5"] }
+ashpd = { version = "0.14.0", default-features = false, features = [
+    "async-io",
+    "gtk4",
+    "screenshot",
+    "global_shortcuts",
+] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-io = "2"
+async-channel = "2"
+futures-lite = "2"
+url = "2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

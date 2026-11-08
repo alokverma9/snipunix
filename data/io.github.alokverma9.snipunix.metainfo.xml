@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.alokverma9.snipunix</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Snipunix</name>
+  <summary>Screenshot. Annotate. Share.</summary>
+  <description>
+    <p>
+      Snipunix captures the screen through the desktop Screenshot portal and
+      lets you choose a region from a frozen image. The M0 prototype covers
+      capture, region selection, and PNG saving. Annotation and sharing arrive
+      in later milestones.
+    </p>
+    <p>
+      Images stay in memory until you save them. Snipunix does not upload
+      anything and contains no telemetry.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.alokverma9.snipunix.desktop</launchable>
+  <provides>
+    <binary>snipunix</binary>
+  </provides>
+  <categories>
+    <category>Utility</category>
+    <category>Graphics</category>
+  </categories>
+  <url type="homepage">https://github.com/alokverma9/snipunix</url>
+  <developer id="io.github.alokverma9">
+    <name>Snipunix contributors</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-08">
+      <description>
+        <p>Initial M0 capture and region-selection prototype.</p>
+      </description>
+    </release>
+  </releases>
+</component>

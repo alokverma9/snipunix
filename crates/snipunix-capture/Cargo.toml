@@ -1,0 +1,21 @@
+[package]
+name = "snipunix-capture"
+description = "Screenshot capture backends for Snipunix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+snipunix-core.workspace = true
+ashpd.workspace = true
+image.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+async-io.workspace = true
+futures-lite.workspace = true
+url.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"

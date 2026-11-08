@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Snipunix
+GenericName=Screenshot Tool
+Comment=Screenshot. Annotate. Share.
+Exec=snipunix %U
+Icon=io.github.alokverma9.snipunix
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=screenshot;capture;snip;annotate;share;
+StartupNotify=true
