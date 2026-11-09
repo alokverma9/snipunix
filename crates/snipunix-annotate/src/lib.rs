@@ -19,7 +19,7 @@ pub use color::Color;
 pub use command::{Command, DEFAULT_HISTORY_LIMIT, EditError, Editor};
 pub use document::{
     Annotation, AnnotationId, AnnotationKind, Arrow, Document, DocumentError, Line, MIN_CROP_SIZE,
-    Shape, Stroke, Text,
+    Redaction, Shape, Stroke, Text,
 };
 pub use export::{DEFAULT_JPEG_QUALITY, ExportError, ExportFormat, encode, save};
 pub use geometry::{DocPoint, DocRect, DocSize};

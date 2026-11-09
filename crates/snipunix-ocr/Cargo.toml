@@ -1,0 +1,24 @@
+[package]
+name = "snipunix-ocr"
+description = "Local OCR, text layout, and redaction for Snipunix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+snipunix-settings.workspace = true
+ocrs.workspace = true
+rten.workspace = true
+rten-imageproc.workspace = true
+sha2.workspace = true
+ureq.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+snipunix-annotate.workspace = true
+snipunix-capture.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"

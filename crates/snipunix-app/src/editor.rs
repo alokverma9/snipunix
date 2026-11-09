@@ -1,6 +1,6 @@
 //! Non-destructive annotation editor built on GTK4 and the shared rasteriser.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -8,10 +8,12 @@ use gtk::cairo;
 use libadwaita as adw;
 use snipunix_annotate::{
     Annotation, AnnotationId, AnnotationKind, Arrow, Color, DocPoint, DocRect, Document, Editor,
-    ExportFormat, Line, MIN_CROP_SIZE, Preview, RenderEngine, RenderedImage, Shape, Stroke, Text,
-    ViewTransform, save,
+    ExportFormat, Line, MIN_CROP_SIZE, Preview, Redaction, RenderEngine, RenderedImage, Shape,
+    Stroke, Text, ViewTransform, save,
 };
 use snipunix_capture::CapturedImage;
+use snipunix_ocr::OcrResult;
+use snipunix_settings::{SaveFormat, Settings};
 
 use snipunix_annotate::view::{ScreenPoint, ScreenSize};
 
@@ -120,6 +122,23 @@ struct OwnedPreview {
     replace: bool,
 }
 
+struct OcrDialog {
+    window: adw::Window,
+    buffer: gtk::TextBuffer,
+    text_view: gtk::TextView,
+    remove_line_breaks: gtk::Switch,
+    redact: gtk::Button,
+    status: gtk::Label,
+}
+
+struct OcrOverlay {
+    result: OcrResult,
+    /// Crop origin in original-image coordinates. OCR boxes are crop-relative.
+    origin: DocPoint,
+    selected: Option<usize>,
+    dialog: OcrDialog,
+}
+
 enum Interaction {
     Pan {
         pan: ScreenPoint,
@@ -164,12 +183,22 @@ struct Inner {
     drag_start: Option<ScreenPoint>,
     drag_moved: bool,
     needs_fit: bool,
+    ocr: Option<OcrOverlay>,
+    ocr_busy: Cell<bool>,
+    settings: Rc<RefCell<Settings>>,
+    settings_path: std::path::PathBuf,
 }
 
 impl Inner {
-    fn new(image: CapturedImage) -> Result<Self, String> {
+    fn new(image: CapturedImage, settings: Rc<RefCell<Settings>>) -> Result<Self, String> {
         let document = Document::new(image).map_err(|error| error.to_string())?;
         let crop = document.crop_rect();
+        let settings_path = Settings::default_path();
+        let export_format = match settings.borrow().files.format {
+            SaveFormat::Png => ExportFormat::Png,
+            SaveFormat::Jpeg => ExportFormat::Jpeg,
+            SaveFormat::Webp => ExportFormat::WebP,
+        };
         Ok(Self {
             editor: Editor::new(document),
             engine: RenderEngine::new(),
@@ -179,7 +208,7 @@ impl Inner {
             width: 3.0,
             font_size: 22.0,
             highlighter_opacity: 0.36,
-            export_format: ExportFormat::Png,
+            export_format,
             selection: None,
             preview: None,
             interaction: None,
@@ -188,6 +217,10 @@ impl Inner {
             drag_start: None,
             drag_moved: false,
             needs_fit: true,
+            ocr: None,
+            ocr_busy: Cell::new(false),
+            settings,
+            settings_path,
         })
     }
 
@@ -263,8 +296,9 @@ impl EditorView {
         image: CapturedImage,
         parent: gtk::Window,
         callbacks: Callbacks,
+        settings: Rc<RefCell<Settings>>,
     ) -> Result<Self, String> {
-        let inner = Rc::new(RefCell::new(Inner::new(image)?));
+        let inner = Rc::new(RefCell::new(Inner::new(image, settings)?));
 
         let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
         root.set_hexpand(true);
@@ -368,6 +402,17 @@ impl EditorView {
             }
         };
         open_export_dialog_impl(&self.inner, &self.ui, &parent);
+    }
+
+    pub fn extract_text(&self) {
+        let parent = match self.root.root().and_downcast::<gtk::Window>() {
+            Some(window) => window,
+            None => {
+                self.ui.toast("Could not locate the editor window.");
+                return;
+            }
+        };
+        start_ocr(&self.inner, &self.ui, &parent);
     }
 
     pub fn undo(&self) {
@@ -586,14 +631,15 @@ fn properties_panel(inner: &Rc<RefCell<Inner>>, ui: &Ui) -> gtk::Widget {
     panel.append(&export_label);
     let formats = gtk::Box::new(gtk::Orientation::Horizontal, 2);
     let mut first_format: Option<gtk::ToggleButton> = None;
-    for (index, format) in ExportFormat::ALL.iter().copied().enumerate() {
+    let current_format = inner.borrow().export_format;
+    for format in ExportFormat::ALL.iter().copied() {
         let button = gtk::ToggleButton::with_label(format.label());
         if let Some(first) = &first_format {
             button.set_group(Some(first));
         } else {
             first_format = Some(button.clone());
         }
-        button.set_active(index == 0);
+        button.set_active(format == current_format);
         let state = Rc::clone(inner);
         button.connect_toggled(move |button| {
             if button.is_active() {
@@ -653,8 +699,11 @@ fn bottom_bar(
 
     let copy = gtk::Button::with_label("Copy Annotated");
     copy.add_css_class("suggested-action");
+    let extract = gtk::Button::with_label("Extract Text");
+    extract.set_tooltip_text(Some("Recognise text in the current crop on this device"));
     let export = gtk::Button::with_label("Export…");
     bar.append(&copy);
+    bar.append(&extract);
     bar.append(&export);
     let close = gtk::Button::with_label("Close Editor");
     bar.append(&close);
@@ -784,6 +833,10 @@ fn bottom_bar(
             Err(error) => ui_for_copy.toast(&error),
         }
     });
+    let state = Rc::clone(inner);
+    let ui_for_extract = ui.clone();
+    let parent_for_extract = parent.clone();
+    extract.connect_clicked(move |_| start_ocr(&state, &ui_for_extract, &parent_for_extract));
     let state = Rc::clone(inner);
     let ui_for_export = ui.clone();
     let parent = parent.clone();
@@ -950,6 +1003,32 @@ fn draw_overlays(state: &Inner, cr: &cairo::Context, viewport: ScreenSize) {
         }
     }
 
+    if let Some(ocr) = &state.ocr {
+        for (index, line) in ocr.result.lines.iter().enumerate() {
+            let document = DocRect::new(
+                ocr.origin.x + f64::from(line.rect.x),
+                ocr.origin.y + f64::from(line.rect.y),
+                f64::from(line.rect.width.max(1)),
+                f64::from(line.rect.height.max(1)),
+            );
+            let rect = state.view.screen_rect_from_doc(document);
+            let selected = ocr.selected == Some(index);
+            if selected {
+                cr.set_source_rgba(0.25, 0.65, 1.0, 0.30);
+            } else {
+                cr.set_source_rgba(1.0, 0.85, 0.20, 0.18);
+            }
+            fill_rect(
+                cr,
+                gtk::cairo::Rectangle::new(rect.x, rect.y, rect.width, rect.height),
+            );
+            cr.set_source_rgba(1.0, 0.75, 0.10, if selected { 1.0 } else { 0.75 });
+            cr.set_line_width(if selected { 2.0 } else { 1.0 });
+            cr.rectangle(rect.x, rect.y, rect.width, rect.height);
+            let _ = cr.stroke();
+        }
+    }
+
     if state.tool == Tool::Eraser {
         if let Some(cursor) = state.cursor {
             let radius = (state.width / 2.0 * state.view.zoom()).max(5.0);
@@ -1070,6 +1149,27 @@ fn install_canvas_input(
         let tool = state.borrow().tool;
         if tool == Tool::Eraser {
             state.borrow_mut().drag_moved = false;
+        }
+        if tool == Tool::Move {
+            let hit = {
+                let state = state.borrow();
+                let document = state.view.doc_from_screen(point);
+                state.ocr.as_ref().and_then(|overlay| {
+                    let x = (document.x - overlay.origin.x).max(0.0) as u32;
+                    let y = (document.y - overlay.origin.y).max(0.0) as u32;
+                    overlay
+                        .result
+                        .line_at(x, y)
+                        .and_then(|line| overlay.result.lines.iter().position(|item| item == line))
+                })
+            };
+            if let Some(index) = hit {
+                if let Some(overlay) = state.borrow_mut().ocr.as_mut() {
+                    select_ocr_line(overlay, index);
+                }
+                ui_for_click.canvas.queue_draw();
+                return;
+            }
         }
         match tool {
             Tool::Text if presses == 1 => {
@@ -1543,6 +1643,411 @@ fn open_text_dialog(
     });
 
     dialog.present(Some(parent));
+}
+
+fn persist_editor_settings(inner: &Inner) {
+    let settings = inner.settings.borrow().clone();
+    if let Err(error) = settings.save(&inner.settings_path) {
+        tracing::warn!(%error, "could not save OCR settings");
+    }
+}
+
+fn start_ocr(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Window) {
+    if inner.borrow().ocr_busy.replace(true) {
+        ui.toast("Text recognition is already running.");
+        return;
+    }
+    let previous = inner.borrow_mut().ocr.take();
+    if let Some(overlay) = previous {
+        overlay.dialog.window.close();
+    }
+    let image = match render_annotated(inner) {
+        Ok(image) => image,
+        Err(error) => {
+            inner.borrow().ocr_busy.set(false);
+            ui.toast(&error);
+            return;
+        }
+    };
+    let crop = inner.borrow().editor.document().crop_rect();
+    let origin = DocPoint::new(crop.x, crop.y);
+    let settings = Rc::clone(&inner.borrow().settings);
+    let configured = settings.borrow().model_directory();
+    let models = snipunix_ocr::ModelPaths::discover(Some(&configured))
+        .or_else(|_| snipunix_ocr::ModelPaths::discover(None));
+    let models = match models {
+        Ok(models) => models,
+        Err(error) => {
+            inner.borrow().ocr_busy.set(false);
+            prompt_download_models(inner, ui, parent, &error.to_string());
+            return;
+        }
+    };
+    let remove_line_breaks = settings.borrow().ocr.remove_line_breaks;
+    let auto_copy = settings.borrow().ocr.auto_copy;
+
+    ui.set_status("Recognising text locally…");
+    let (sender, receiver) = async_channel::bounded(1);
+    std::thread::spawn(move || {
+        let result = snipunix_ocr::recognize(image.rgba(), image.width(), image.height(), &models)
+            .map_err(|error| error.to_string());
+        let _ = sender.send_blocking(result);
+    });
+
+    let inner = Rc::clone(inner);
+    let ui = ui.clone();
+    let parent = parent.clone();
+    glib::spawn_future_local(async move {
+        let result = match receiver.recv().await {
+            Ok(result) => result,
+            Err(_) => Err("the OCR worker stopped unexpectedly".to_string()),
+        };
+        inner.borrow().ocr_busy.set(false);
+        match result {
+            Ok(result) if result.is_empty() => {
+                ui.set_status("No text was recognised in the current crop.");
+                ui.toast("No text was recognised in the current crop.");
+            }
+            Ok(result) => {
+                if auto_copy {
+                    let text = result.text(remove_line_breaks);
+                    if !text.is_empty() {
+                        copy_text_to_clipboard(&text);
+                    }
+                }
+                ui.set_status(&format!(
+                    "Recognised {} text line(s) locally.",
+                    result.lines.len()
+                ));
+                show_ocr_dialog(&inner, &ui, &parent, result, origin);
+            }
+            Err(error) => {
+                ui.set_status("Text recognition failed.");
+                ui.toast(&format!("Text recognition failed: {error}"));
+            }
+        }
+    });
+}
+
+fn prompt_download_models(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Window, detail: &str) {
+    let dialog = adw::MessageDialog::builder()
+        .heading("Text recognition needs a local model")
+        .body(format!(
+            "OCR runs on this device. Snipunix needs two model files (about 12 MB).\n\n{detail}"
+        ))
+        .transient_for(parent)
+        .modal(true)
+        .build();
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("download", "Download Models");
+    dialog.set_response_appearance("download", adw::ResponseAppearance::Suggested);
+    dialog.set_default_response(Some("cancel"));
+    dialog.set_close_response("cancel");
+    let inner = Rc::clone(inner);
+    let ui = ui.clone();
+    let parent = parent.clone();
+    glib::spawn_future_local(async move {
+        if dialog.choose_future().await != "download" {
+            ui.set_status("Text recognition cancelled: the OCR models are not installed.");
+            return;
+        }
+        let directory = inner.borrow().settings.borrow().model_directory();
+        ui.set_status("Downloading and verifying OCR models…");
+        let (sender, receiver) = async_channel::bounded(1);
+        std::thread::spawn(move || {
+            let result = snipunix_ocr::download_models(&directory)
+                .map(|_| ())
+                .map_err(|error| error.to_string());
+            let _ = sender.send_blocking(result);
+        });
+        match receiver.recv().await {
+            Ok(Ok(())) => {
+                ui.toast("OCR models installed.");
+                start_ocr(&inner, &ui, &parent);
+            }
+            Ok(Err(error)) => {
+                ui.set_status("Could not install OCR models.");
+                ui.toast(&format!("Could not install OCR models: {error}"));
+            }
+            Err(_) => ui.toast("The OCR model download stopped unexpectedly."),
+        }
+    });
+}
+
+fn show_ocr_dialog(
+    inner: &Rc<RefCell<Inner>>,
+    ui: &Ui,
+    parent: &gtk::Window,
+    result: OcrResult,
+    origin: DocPoint,
+) {
+    let window = adw::Window::builder()
+        .title("Extracted text")
+        .transient_for(parent)
+        .modal(false)
+        .default_width(620)
+        .default_height(520)
+        .build();
+    let header = adw::HeaderBar::new();
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+
+    let buffer = gtk::TextBuffer::new(None::<&gtk::TextTagTable>);
+    let text_view = gtk::TextView::builder()
+        .buffer(&buffer)
+        .editable(false)
+        .cursor_visible(true)
+        .monospace(true)
+        .wrap_mode(gtk::WrapMode::WordChar)
+        .top_margin(8)
+        .bottom_margin(8)
+        .left_margin(8)
+        .right_margin(8)
+        .build();
+    let scrolled = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vexpand(true)
+        .child(&text_view)
+        .build();
+
+    let remove_line_breaks = gtk::Switch::new();
+    remove_line_breaks.set_active(inner.borrow().settings.borrow().ocr.remove_line_breaks);
+    remove_line_breaks.set_valign(gtk::Align::Center);
+    let auto_copy = gtk::Switch::new();
+    auto_copy.set_active(inner.borrow().settings.borrow().ocr.auto_copy);
+    auto_copy.set_valign(gtk::Align::Center);
+
+    let options = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    options.set_margin_top(8);
+    options.set_margin_start(12);
+    options.set_margin_end(12);
+    let remove_label = gtk::Label::new(Some("Remove line breaks"));
+    remove_label.set_xalign(0.0);
+    remove_label.set_hexpand(true);
+    options.append(&remove_label);
+    options.append(&remove_line_breaks);
+    let auto_label = gtk::Label::new(Some("Auto-copy"));
+    auto_label.set_xalign(0.0);
+    options.append(&auto_label);
+    options.append(&auto_copy);
+
+    let detected = result.redaction_rects().len();
+    let redact_label = if detected == 0 {
+        "No sensitive text".to_string()
+    } else {
+        format!("Redact {detected} detected")
+    };
+    let redact = gtk::Button::with_label(&redact_label);
+    redact.set_sensitive(detected > 0);
+    redact.set_tooltip_text(Some(
+        "Cover detected emails and phone numbers with opaque black",
+    ));
+
+    let copy = gtk::Button::with_label("Copy All");
+    copy.add_css_class("suggested-action");
+    let close = gtk::Button::with_label("Close");
+    let status = gtk::Label::new(Some(&format!(
+        "{} line(s) recognised locally.",
+        result.lines.len()
+    )));
+    status.set_xalign(0.0);
+    status.set_hexpand(true);
+    status.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    status.add_css_class("dim-label");
+
+    let actions = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    actions.set_margin_top(8);
+    actions.set_margin_bottom(8);
+    actions.set_margin_start(12);
+    actions.set_margin_end(12);
+    actions.append(&status);
+    actions.append(&redact);
+    actions.append(&copy);
+    actions.append(&close);
+
+    let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    content.append(&scrolled);
+    content.append(&options);
+    content.append(&actions);
+    toolbar.set_content(Some(&content));
+    window.set_content(Some(&toolbar));
+
+    let remove_line_breaks_value = inner.borrow().settings.borrow().ocr.remove_line_breaks;
+    buffer.set_text(&result.text(remove_line_breaks_value));
+
+    let overlay = OcrOverlay {
+        result,
+        origin,
+        selected: None,
+        dialog: OcrDialog {
+            window: window.clone(),
+            buffer: buffer.clone(),
+            text_view: text_view.clone(),
+            remove_line_breaks: remove_line_breaks.clone(),
+            redact: redact.clone(),
+            status: status.clone(),
+        },
+    };
+    inner.borrow_mut().ocr = Some(overlay);
+    ui.sync(inner);
+
+    {
+        let inner = Rc::clone(inner);
+        remove_line_breaks.connect_active_notify(move |switch| {
+            let remove = switch.is_active();
+            let text = {
+                let state = inner.borrow();
+                state.settings.borrow_mut().ocr.remove_line_breaks = remove;
+                persist_editor_settings(&state);
+                let Some(overlay) = state.ocr.as_ref() else {
+                    return;
+                };
+                overlay.result.text(remove)
+            };
+            if let Some(overlay) = inner.borrow().ocr.as_ref() {
+                overlay.dialog.buffer.set_text(&text);
+                overlay.dialog.remove_line_breaks.set_active(remove);
+            }
+        });
+    }
+    {
+        let inner = Rc::clone(inner);
+        auto_copy.connect_active_notify(move |switch| {
+            let enabled = switch.is_active();
+            let state = inner.borrow();
+            state.settings.borrow_mut().ocr.auto_copy = enabled;
+            persist_editor_settings(&state);
+        });
+    }
+    {
+        let inner = Rc::clone(inner);
+        let ui = ui.clone();
+        copy.connect_clicked(move |_| {
+            let text = inner
+                .borrow()
+                .ocr
+                .as_ref()
+                .map(|overlay| {
+                    overlay
+                        .dialog
+                        .buffer
+                        .text(
+                            &overlay.dialog.buffer.start_iter(),
+                            &overlay.dialog.buffer.end_iter(),
+                            false,
+                        )
+                        .to_string()
+                })
+                .unwrap_or_default();
+            if text.is_empty() {
+                ui.toast("There is no recognised text to copy.");
+                return;
+            }
+            if copy_text_to_clipboard(&text) {
+                ui.set_status("Copied recognised text to the clipboard.");
+                ui.toast("Copied recognised text to the clipboard.");
+            } else {
+                ui.toast("Could not access the display clipboard.");
+            }
+        });
+    }
+    {
+        let inner = Rc::clone(inner);
+        let ui = ui.clone();
+        redact.connect_clicked(move |_| {
+            let applied = apply_ocr_redactions(&inner);
+            match applied {
+                Ok(0) => ui.toast("No emails or phone numbers were detected."),
+                Ok(count) => {
+                    let message = format!(
+                        "Redacted {count} detected region(s) with opaque black. The black fill is part of the image output."
+                    );
+                    ui.set_status(&message);
+                    ui.toast(&message);
+                }
+                Err(error) => ui.toast(&error),
+            }
+            ui.sync(&inner);
+        });
+    }
+    {
+        let window_for_close = window.clone();
+        close.connect_clicked(move |_| window_for_close.close());
+    }
+    {
+        let inner = Rc::clone(inner);
+        let ui = ui.clone();
+        window.connect_close_request(move |_| {
+            inner.borrow_mut().ocr = None;
+            ui.sync(&inner);
+            glib::Propagation::Proceed
+        });
+    }
+    window.present();
+}
+
+fn copy_text_to_clipboard(text: &str) -> bool {
+    let Some(display) = gdk::Display::default() else {
+        return false;
+    };
+    display.clipboard().set_text(text);
+    true
+}
+
+fn select_ocr_line(overlay: &mut OcrOverlay, index: usize) {
+    overlay.selected = Some(index);
+    let buffer = &overlay.dialog.buffer;
+    let Some(mut start) = buffer.iter_at_line(i32::try_from(index).unwrap_or(0)) else {
+        return;
+    };
+    let end = buffer
+        .iter_at_line(i32::try_from(index + 1).unwrap_or(i32::MAX))
+        .unwrap_or_else(|| buffer.end_iter());
+    buffer.select_range(&start, &end);
+    let _ = overlay
+        .dialog
+        .text_view
+        .scroll_to_iter(&mut start, 0.0, false, 0.0, 0.0);
+}
+
+fn apply_ocr_redactions(inner: &Rc<RefCell<Inner>>) -> Result<usize, String> {
+    let (rectangles, origin) = {
+        let state = inner.borrow();
+        let Some(overlay) = state.ocr.as_ref() else {
+            return Ok(0);
+        };
+        (overlay.result.redaction_rects(), overlay.origin)
+    };
+    if rectangles.is_empty() {
+        return Ok(0);
+    }
+    let mut state = inner.borrow_mut();
+    let mut annotations = Vec::with_capacity(rectangles.len());
+    for rectangle in &rectangles {
+        let rect = DocRect::new(
+            origin.x + f64::from(rectangle.x),
+            origin.y + f64::from(rectangle.y),
+            f64::from(rectangle.width.max(1)),
+            f64::from(rectangle.height.max(1)),
+        );
+        let annotation = state
+            .editor
+            .create_annotation(AnnotationKind::Redaction(Redaction { rect }));
+        annotations.push(annotation);
+    }
+    let count = annotations.len();
+    state.editor.add_annotations(annotations);
+    state.selection = None;
+    if let Some(overlay) = state.ocr.as_mut() {
+        overlay.selected = None;
+        overlay.dialog.redact.set_sensitive(false);
+        overlay.dialog.redact.set_label("Redacted");
+        overlay
+            .dialog
+            .status
+            .set_label("Redaction applied. The black pixels are part of the output.");
+    }
+    Ok(count)
 }
 
 fn render_annotated(inner: &Rc<RefCell<Inner>>) -> Result<RenderedImage, String> {

@@ -20,6 +20,14 @@ pub struct Cli {
     pub portal_info: bool,
     /// Countdown in seconds (0–10) before the screen is frozen.
     pub delay: u32,
+    /// Recognise text in an existing image and print it.
+    pub ocr: Option<PathBuf>,
+    /// Explicit OCR model directory.
+    pub ocr_models: Option<PathBuf>,
+    /// Join recognised lines with spaces instead of newlines.
+    pub remove_line_breaks: bool,
+    /// Explicitly download the pinned OCR models and exit.
+    pub download_ocr_models: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -40,6 +48,20 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<ParseResult, Stri
             "--exit" => cli.exit_after = true,
             "--register-shortcuts" => cli.register_shortcuts = true,
             "--portal-info" => cli.portal_info = true,
+            "--remove-line-breaks" => cli.remove_line_breaks = true,
+            "--download-ocr-models" => cli.download_ocr_models = true,
+            "--ocr" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--ocr requires an image path".to_string())?;
+                cli.ocr = Some(PathBuf::from(value));
+            }
+            "--ocr-models" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--ocr-models requires a directory".to_string())?;
+                cli.ocr_models = Some(PathBuf::from(value));
+            }
             "--delay" => {
                 let value = args
                     .next()
@@ -94,6 +116,10 @@ OPTIONS:
     --exit                      Quit after the capture completes.
     --register-shortcuts        Register global shortcuts through the portal.
     --portal-info               Print Screenshot portal capabilities and exit.
+    --ocr <PATH>                Recognise text in an image, print it, and exit.
+    --ocr-models <DIR>          Use OCR models from DIR.
+    --remove-line-breaks        Join OCR lines with spaces instead of newlines.
+    --download-ocr-models       Download and verify the pinned OCR models.
     -h, --help                  Show this help.
     -V, --version               Show the version.
 
@@ -151,6 +177,27 @@ mod tests {
         assert!(parse_args(&["--delay", "11"]).is_err());
         assert!(parse_args(&["--delay", "-1"]).is_err());
         assert!(parse_args(&["--delay", "abc"]).is_err());
+    }
+
+    #[test]
+    fn parses_ocr_options() {
+        let ParseResult::Run(cli) = parse_args(&[
+            "--ocr",
+            "/tmp/shot.png",
+            "--ocr-models",
+            "/opt/models",
+            "--remove-line-breaks",
+        ])
+        .unwrap() else {
+            panic!("expected run");
+        };
+        assert_eq!(cli.ocr, Some(PathBuf::from("/tmp/shot.png")));
+        assert_eq!(cli.ocr_models, Some(PathBuf::from("/opt/models")));
+        assert!(cli.remove_line_breaks);
+        assert!(!cli.download_ocr_models);
+        assert!(parse_args(&["--download-ocr-models"]).is_ok());
+        assert!(parse_args(&["--ocr"]).is_err());
+        assert!(parse_args(&["--ocr-models"]).is_err());
     }
 
     #[test]

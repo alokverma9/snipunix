@@ -15,9 +15,16 @@ use futures_lite::StreamExt;
 pub const REGION_SHORTCUT_ID: &str = "capture-region";
 pub const SCREEN_SHORTCUT_ID: &str = "capture-screen";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoundShortcut {
+    pub id: String,
+    pub description: String,
+    pub trigger: String,
+}
+
 #[derive(Debug, Clone)]
 pub enum ShortcutEvent {
-    Registered(Vec<String>),
+    Registered(Vec<BoundShortcut>),
     Failed(String),
     Activated(String),
     Deactivated(String),
@@ -30,6 +37,9 @@ pub enum ShortcutEvent {
 pub async fn run(
     sender: async_channel::Sender<ShortcutEvent>,
     parent: Option<WindowIdentifier>,
+    region_trigger: &str,
+    screen_trigger: &str,
+    stop: async_channel::Receiver<()>,
 ) -> Result<(), AshpdError> {
     register_host_identity().await;
     let proxy = GlobalShortcuts::new().await?;
@@ -41,9 +51,9 @@ pub async fn run(
 
     let shortcuts = [
         NewShortcut::new(REGION_SHORTCUT_ID, "Capture a screen region")
-            .preferred_trigger("CTRL+SHIFT+s"),
+            .preferred_trigger(region_trigger),
         NewShortcut::new(SCREEN_SHORTCUT_ID, "Capture the full screen")
-            .preferred_trigger("CTRL+SHIFT+a"),
+            .preferred_trigger(screen_trigger),
     ];
     let request = proxy
         .bind_shortcuts(
@@ -57,41 +67,52 @@ pub async fn run(
     let descriptions = bound
         .shortcuts()
         .iter()
-        .map(|shortcut| {
-            format!(
-                "{} — {} ({})",
-                shortcut.id(),
-                shortcut.description(),
-                shortcut.trigger_description()
-            )
+        .map(|shortcut| BoundShortcut {
+            id: shortcut.id().to_string(),
+            description: shortcut.description().to_string(),
+            trigger: shortcut.trigger_description().to_string(),
         })
         .collect();
     let _ = sender.send(ShortcutEvent::Registered(descriptions)).await;
 
+    enum Signal {
+        Activated(String),
+        Deactivated(String),
+        Stop,
+    }
+
     loop {
         let event = futures_lite::future::or(
-            async {
-                activated
-                    .next()
-                    .await
-                    .map(|signal| ShortcutEvent::Activated(signal.shortcut_id().to_string()))
-            },
-            async {
-                deactivated
-                    .next()
-                    .await
-                    .map(|signal| ShortcutEvent::Deactivated(signal.shortcut_id().to_string()))
-            },
+            futures_lite::future::or(
+                async {
+                    activated
+                        .next()
+                        .await
+                        .map(|signal| Signal::Activated(signal.shortcut_id().to_string()))
+                },
+                async {
+                    deactivated
+                        .next()
+                        .await
+                        .map(|signal| Signal::Deactivated(signal.shortcut_id().to_string()))
+                },
+            ),
+            async { stop.recv().await.ok().map(|()| Signal::Stop) },
         )
         .await;
 
         match event {
-            Some(event) => {
-                if sender.send(event).await.is_err() {
+            Some(Signal::Activated(id)) => {
+                if sender.send(ShortcutEvent::Activated(id)).await.is_err() {
                     break;
                 }
             }
-            None => break,
+            Some(Signal::Deactivated(id)) => {
+                if sender.send(ShortcutEvent::Deactivated(id)).await.is_err() {
+                    break;
+                }
+            }
+            Some(Signal::Stop) | None => break,
         }
     }
     Ok(())

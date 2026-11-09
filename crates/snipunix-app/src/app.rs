@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use libadwaita as adw;
+use snipunix_annotate::{ExportFormat, RenderedImage};
 use snipunix_capture::{
     CaptureBackend, CaptureError, CaptureOptions, CapturedImage, PortalScreenshot,
 };
@@ -15,9 +16,14 @@ use snipunix_overlay::{
     start_countdown,
 };
 
+use snipunix_settings::{CaptureMode, Settings};
+
 use crate::cli::{CaptureTarget, Cli};
 use crate::editor::{self, EditorView};
+use crate::onboarding;
+use crate::settings_ui;
 use crate::shortcuts::{self, ShortcutEvent};
+use crate::tray::{self, TrayCommand};
 
 pub const APP_ID: &str = "io.github.alokverma9.snipunix";
 
@@ -43,6 +49,8 @@ pub fn run(cli: Cli) -> glib::ExitCode {
     app.set_accels_for_action("app.redo", &["<Control><Shift>z"]);
     app.set_accels_for_action("app.copy", &["<Control>c"]);
     app.set_accels_for_action("app.save-as", &["<Control>s"]);
+    app.set_accels_for_action("app.settings", &["<Control>comma"]);
+    app.set_accels_for_action("app.extract-text", &["<Control><Shift>o"]);
     app.set_accels_for_action("app.quit", &["<Control>q"]);
     // Arguments are parsed by our own CLI; do not let GApplication interpret
     // application-specific flags such as `--capture`.
@@ -58,8 +66,11 @@ fn activate(app: &adw::Application, cli: Cli) {
     install_actions(&state);
     state.window.present();
 
+    setup_tray(&state);
+
     let launch_target = state.launch_target.get();
-    let register_shortcuts_on_start = state.register_shortcuts_on_start.get();
+    let register_shortcuts_on_start = state.register_shortcuts_on_start.get()
+        || state.settings.borrow().shortcuts.register_on_startup;
     if register_shortcuts_on_start {
         let state = Rc::clone(&state);
         glib::idle_add_local_once(move || register_shortcuts(&state));
@@ -67,6 +78,24 @@ fn activate(app: &adw::Application, cli: Cli) {
     if let Some(target) = launch_target {
         let state = Rc::clone(&state);
         glib::idle_add_local_once(move || start_capture(&state, target));
+    } else if !state.settings.borrow().onboarding_complete {
+        let settings = Rc::clone(&state.settings);
+        let path = state.settings_path.clone();
+        let parent: gtk::Window = state.window.clone().upcast();
+        let weak = Rc::downgrade(&state);
+        glib::idle_add_local_once(move || {
+            onboarding::show(
+                settings,
+                path,
+                &parent,
+                Rc::new(move || {
+                    if let Some(state) = weak.upgrade() {
+                        register_shortcuts(&state);
+                    }
+                }),
+                Rc::new(open_keyboard_settings),
+            );
+        });
     }
 }
 
@@ -85,6 +114,10 @@ struct AppState {
     launch_target: Cell<Option<CaptureTarget>>,
     register_shortcuts_on_start: Cell<bool>,
     shortcut_registered: Cell<bool>,
+    shortcut_stop: RefCell<Option<async_channel::Sender<()>>>,
+    tray: RefCell<Option<tray::TrayHandle>>,
+    settings: Rc<RefCell<Settings>>,
+    settings_path: PathBuf,
     current: RefCell<Option<CapturedImage>>,
     last_region: RefCell<Option<RegionContext>>,
     clipboard_owned: Cell<bool>,
@@ -101,6 +134,13 @@ struct AppState {
 struct RegionContext {
     full: CapturedImage,
     logical: LogicalRect,
+}
+
+fn persist_settings(state: &AppState) {
+    let settings = state.settings.borrow().clone();
+    if let Err(error) = settings.save(&state.settings_path) {
+        tracing::warn!(%error, path = %state.settings_path.display(), "could not save settings");
+    }
 }
 
 impl AppState {
@@ -140,6 +180,15 @@ impl AppState {
 }
 
 fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
+    let settings_path = Settings::default_path();
+    let mut loaded = Settings::load(&settings_path).unwrap_or_else(|error| {
+        tracing::warn!(%error, path = %settings_path.display(), "could not load settings; using defaults");
+        Settings::default()
+    });
+    if cli.delay > 0 {
+        loaded.capture.delay = cli.delay;
+    }
+
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Snipunix")
@@ -153,9 +202,10 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
 
     let menu = gio::Menu::new();
     menu.append(
-        Some("Register Global Shortcut (prototype)"),
+        Some("Register Global Shortcuts"),
         Some("app.register-shortcuts"),
     );
+    menu.append(Some("Settings…"), Some("app.settings"));
     menu.append(Some("Portal Information"), Some("app.portal-info"));
     menu.append(Some("About Snipunix"), Some("app.about"));
     menu.append(Some("Quit"), Some("app.quit"));
@@ -188,7 +238,7 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     delay_label.add_css_class("dim-label");
     delay_label.set_margin_start(12);
     let delay_spin = gtk::SpinButton::with_range(0.0, 10.0, 1.0);
-    delay_spin.set_value(f64::from(cli.delay));
+    delay_spin.set_value(f64::from(loaded.capture.delay));
     delay_spin.set_tooltip_text(Some("Seconds to wait before freezing the screen"));
     delay_spin.set_width_chars(2);
     action_bar.append(&delay_label);
@@ -237,10 +287,14 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
              Images stay in memory and never leave this device.",
         )
         .build();
-    let empty_action = gtk::Button::with_label("Capture Region");
+    let (empty_label, empty_target) = match loaded.capture.default_mode {
+        CaptureMode::Region => ("Capture Region", "app.capture-region"),
+        CaptureMode::Screen => ("Capture Screen", "app.capture-screen"),
+    };
+    let empty_action = gtk::Button::with_label(empty_label);
     empty_action.add_css_class("suggested-action");
     empty_action.add_css_class("pill");
-    empty_action.set_action_name(Some("app.capture-region"));
+    empty_action.set_action_name(Some(empty_target));
     empty_page.set_child(Some(&empty_action));
     stack.add_named(&empty_page, Some("empty"));
 
@@ -284,6 +338,7 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     toast_overlay.set_child(Some(&toolbar_view));
     window.set_content(Some(&toast_overlay));
 
+    let initial_delay = loaded.capture.delay;
     let state = Rc::new(AppState {
         app: app.clone(),
         window,
@@ -299,10 +354,14 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
         launch_target: Cell::new(cli.target),
         register_shortcuts_on_start: Cell::new(cli.register_shortcuts),
         shortcut_registered: Cell::new(false),
+        shortcut_stop: RefCell::new(None),
+        tray: RefCell::new(None),
+        settings: Rc::new(RefCell::new(loaded)),
+        settings_path,
         current: RefCell::new(None),
         last_region: RefCell::new(None),
         clipboard_owned: Cell::new(false),
-        delay: Cell::new(cli.delay),
+        delay: Cell::new(initial_delay),
         preview_bar,
         copy_button,
         save_button,
@@ -314,7 +373,10 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     let delay_state = Rc::downgrade(&state);
     delay_spin.connect_value_changed(move |spin| {
         if let Some(state) = delay_state.upgrade() {
-            state.delay.set(spin.value_as_int().clamp(0, 10) as u32);
+            let delay = spin.value_as_int().clamp(0, 10) as u32;
+            state.delay.set(delay);
+            state.settings.borrow_mut().capture.delay = delay;
+            persist_settings(&state);
         }
     });
 
@@ -352,6 +414,20 @@ fn install_actions(state: &Rc<AppState>) {
     add_action(app, "register-shortcuts", {
         let state = Rc::clone(state);
         move || register_shortcuts(&state)
+    });
+    add_action(app, "settings", {
+        let state = Rc::clone(state);
+        move || open_settings(&state)
+    });
+    add_action(app, "extract-text", {
+        let state = Rc::clone(state);
+        move || {
+            if let Some(editor) = state.editor.borrow().as_ref().cloned() {
+                editor.extract_text();
+            } else {
+                state.toast("Open the annotation editor before extracting text.");
+            }
+        }
     });
     add_action(app, "portal-info", {
         let state = Rc::clone(state);
@@ -485,7 +561,8 @@ fn handle_capture(state: &Rc<AppState>, image: CapturedImage, target: CaptureTar
             state.save_button.set_sensitive(true);
             state.annotate_button.set_sensitive(true);
             state.adjust_button.set_sensitive(false);
-            let copied = copy_to_clipboard(state, &image);
+            let copied = state.settings.borrow().capture.copy_after_capture
+                && copy_to_clipboard(state, &image);
             state.set_status(if copied {
                 format!(
                     "Captured the full desktop ({} × {}) and copied it to the clipboard.",
@@ -499,11 +576,20 @@ fn handle_capture(state: &Rc<AppState>, image: CapturedImage, target: CaptureTar
                     image.height()
                 )
             });
-            save_pending(state, &image);
+            save_after_capture(state, &image);
             state.quit_if_requested();
         }
         CaptureTarget::Region => {
-            begin_overlay(state, image, OverlayOptions::default());
+            let initial = if state.settings.borrow().capture.remember_last_region {
+                state
+                    .last_region
+                    .borrow()
+                    .as_ref()
+                    .map(|context| context.logical)
+            } else {
+                None
+            };
+            begin_overlay(state, image, overlay_options(state, initial));
         }
     }
 }
@@ -530,7 +616,13 @@ fn handle_capture_error(state: &Rc<AppState>, error: &CaptureError) {
         other => format!("Capture failed: {other}"),
     };
     state.set_status(&message);
-    if !matches!(
+    if matches!(
+        error,
+        CaptureError::PermissionDenied | CaptureError::PermissionDeniedWithDetail(_)
+    ) {
+        let parent: gtk::Window = state.window.clone().upcast();
+        settings_ui::show_permission_help(&parent, &message);
+    } else if !matches!(
         error,
         CaptureError::Cancelled | CaptureError::CancelledWithDetail(_)
     ) {
@@ -654,7 +746,8 @@ fn commit_region(
             state.save_button.set_sensitive(true);
             state.annotate_button.set_sensitive(true);
             state.adjust_button.set_sensitive(true);
-            let copied = copy_to_clipboard(state, &cropped);
+            let copied = state.settings.borrow().capture.copy_after_capture
+                && copy_to_clipboard(state, &cropped);
             state.set_status(if copied {
                 format!(
                     "Selected region ({} × {}) and copied it to the clipboard.",
@@ -668,7 +761,7 @@ fn commit_region(
                     cropped.height()
                 )
             });
-            save_pending(state, &cropped);
+            save_after_capture(state, &cropped);
         }
         Err(error) => {
             tracing::warn!(%error, "could not crop the region");
@@ -731,7 +824,7 @@ fn open_editor(state: &Rc<AppState>) {
     };
 
     let parent: gtk::Window = state.window.clone().upcast();
-    match EditorView::new(image, parent, callbacks) {
+    match EditorView::new(image, parent, callbacks, Rc::clone(&state.settings)) {
         Ok(view) => {
             let view = Rc::new(view);
             state.stack.add_named(&view.root, Some("editor"));
@@ -788,10 +881,30 @@ fn save_as(state: &Rc<AppState>) {
         state.toast("There is no captured image to save yet.");
         return;
     };
+    let (format, quality) = {
+        let settings = state.settings.borrow();
+        (
+            export_format(settings.files.format),
+            settings.files.jpeg_quality,
+        )
+    };
     let dialog = gtk::FileDialog::builder()
         .title("Save screenshot")
-        .initial_name(default_file_name())
+        .initial_name(default_file_name(format))
         .build();
+    let filters = gio::ListStore::new::<gtk::FileFilter>();
+    let filter = gtk::FileFilter::new();
+    filter.set_name(Some(&format!(
+        "{} image (*.{})",
+        format.label(),
+        format.extension()
+    )));
+    filter.add_mime_type(format.mime());
+    filter.add_pattern(&format!("*.{}", format.extension()));
+    filters.append(&filter);
+    dialog.set_filters(Some(&filters));
+    dialog.set_default_filter(Some(&filter));
+
     let state = Rc::clone(state);
     let parent = state.window.clone();
     dialog.save(
@@ -803,15 +916,21 @@ fn save_as(state: &Rc<AppState>) {
                     state.toast("The selected location is not a local file.");
                     return;
                 };
-                match image.save_png(&path) {
+                let path = with_format_extension(path, format);
+                match encode_capture(&image, format, quality)
+                    .and_then(|bytes| {
+                        std::fs::write(&path, bytes).map_err(|error| error.to_string())
+                    })
+                {
                     Ok(()) => {
-                        tracing::info!(path = %path.display(), "saved PNG");
-                        let message = format!("Saved PNG to {}", path.display());
+                        tracing::info!(path = %path.display(), format = format.label(), "saved capture");
+                        let message = format!("Saved {} to {}", format.label(), path.display());
                         state.set_status(&message);
                         state.toast(&message);
                     }
                     Err(error) => {
-                        let message = format!("Could not save PNG to {}: {error}", path.display());
+                        let message =
+                            format!("Could not save {} to {}: {error}", format.label(), path.display());
                         state.toast(&message);
                     }
                 }
@@ -825,12 +944,37 @@ fn save_as(state: &Rc<AppState>) {
     );
 }
 
-fn default_file_name() -> String {
+fn export_format(format: snipunix_settings::SaveFormat) -> ExportFormat {
+    match format {
+        snipunix_settings::SaveFormat::Png => ExportFormat::Png,
+        snipunix_settings::SaveFormat::Jpeg => ExportFormat::Jpeg,
+        snipunix_settings::SaveFormat::Webp => ExportFormat::WebP,
+    }
+}
+
+fn with_format_extension(mut path: PathBuf, format: ExportFormat) -> PathBuf {
+    if path.extension().and_then(|extension| extension.to_str()) != Some(format.extension()) {
+        path.set_extension(format.extension());
+    }
+    path
+}
+
+fn encode_capture(
+    image: &CapturedImage,
+    format: ExportFormat,
+    quality: u8,
+) -> Result<Vec<u8>, String> {
+    let rendered = RenderedImage::new(image.width(), image.height(), image.rgba().to_vec())
+        .map_err(|error| error.to_string())?;
+    snipunix_annotate::encode(&rendered, format, quality).map_err(|error| error.to_string())
+}
+
+fn default_file_name(format: ExportFormat) -> String {
     let stamp = glib::DateTime::now_local()
         .ok()
         .and_then(|date| date.format("%Y%m%d-%H%M%S").ok())
         .map_or_else(|| "screenshot".to_string(), |value| value.to_string());
-    format!("snipunix-{stamp}.png")
+    format!("snipunix-{stamp}.{}", format.extension())
 }
 
 fn adjust_region(state: &Rc<AppState>) {
@@ -842,15 +986,93 @@ fn adjust_region(state: &Rc<AppState>) {
         state.toast("There is no region to adjust.");
         return;
     };
+    let options = overlay_options(state, Some(context.logical));
     begin_overlay(
         state,
         context.full,
         OverlayOptions {
             auto_commit_on_release: false,
-            initial_selection: Some(context.logical),
-            magnifier: true,
+            ..options
         },
     );
+}
+
+fn overlay_options(state: &AppState, initial: Option<LogicalRect>) -> OverlayOptions {
+    let settings = state.settings.borrow();
+    OverlayOptions {
+        auto_commit_on_release: true,
+        initial_selection: initial,
+        magnifier: settings.appearance.show_magnifier,
+        dim_strength: settings.appearance.dim_strength as f32,
+    }
+}
+
+fn save_after_capture(state: &AppState, image: &CapturedImage) -> bool {
+    if save_pending(state, image) {
+        return true;
+    }
+    if !state.settings.borrow().files.auto_save {
+        return false;
+    }
+    save_auto(state, image)
+}
+
+fn save_auto(state: &AppState, image: &CapturedImage) -> bool {
+    let (directory, template, format, quality) = {
+        let settings = state.settings.borrow();
+        (
+            settings.files.directory_or_default(),
+            settings.files.filename_template.clone(),
+            settings.files.format,
+            settings.files.jpeg_quality,
+        )
+    };
+    let expanded = glib::DateTime::now_local()
+        .ok()
+        .and_then(|date| date.format(&template).ok())
+        .map_or_else(|| "Screenshot".to_string(), |value| value.to_string())
+        .replace('/', "-");
+    let extension = format.extension();
+    let mut name = if expanded
+        .to_ascii_lowercase()
+        .ends_with(&format!(".{extension}"))
+    {
+        expanded
+    } else {
+        format!("{expanded}.{extension}")
+    };
+    let mut path = directory.join(&name);
+    let mut suffix = 1;
+    while path.exists() {
+        let stem = name
+            .rsplit_once('.')
+            .map_or(name.as_str(), |(stem, _)| stem)
+            .to_string();
+        name = format!("{stem}-{suffix}.{extension}");
+        path = directory.join(&name);
+        suffix += 1;
+        if suffix > 10_000 {
+            state.toast("Could not find a free auto-save file name.");
+            return false;
+        }
+    }
+    let format = export_format(format);
+    match encode_capture(image, format, quality).and_then(|bytes| {
+        std::fs::create_dir_all(&directory)
+            .map_err(|error| error.to_string())
+            .and_then(|()| std::fs::write(&path, bytes).map_err(|error| error.to_string()))
+    }) {
+        Ok(()) => {
+            let message = format!("Auto-saved to {}", path.display());
+            tracing::info!(path = %path.display(), "auto-saved capture");
+            state.toast(&message);
+            true
+        }
+        Err(error) => {
+            state.toast(format!("Could not auto-save {}: {error}", path.display()));
+            false
+        }
+    }
 }
 
 fn save_pending(state: &AppState, image: &CapturedImage) -> bool {
@@ -888,11 +1110,26 @@ fn texture_from_image(image: &CapturedImage) -> gdk::Texture {
 }
 
 fn register_shortcuts(state: &Rc<AppState>) {
+    // A rebind starts a fresh portal session: stop the old listener first so
+    // two sessions never fight over the same application ID.
+    if let Some(stop) = state.shortcut_stop.borrow_mut().take() {
+        let _ = stop.send_blocking(());
+        state.shortcut_registered.set(false);
+    }
     if state.shortcut_registered.get() {
         state.toast("Global shortcuts are already registered.");
         return;
     }
     state.set_status("Requesting global shortcut registration…");
+    let (region_trigger, screen_trigger) = {
+        let settings = state.settings.borrow();
+        (
+            settings.shortcuts.region_trigger.clone(),
+            settings.shortcuts.screen_trigger.clone(),
+        )
+    };
+    let (stop_sender, stop_receiver) = async_channel::bounded(1);
+    state.shortcut_stop.replace(Some(stop_sender));
 
     let (sender, receiver) = async_channel::unbounded();
     let receiver_state = Rc::clone(state);
@@ -910,7 +1147,15 @@ fn register_shortcuts(state: &Rc<AppState>) {
             None
         };
         let error_sender = sender.clone();
-        if let Err(error) = shortcuts::run(sender, parent).await {
+        if let Err(error) = shortcuts::run(
+            sender,
+            parent,
+            &region_trigger,
+            &screen_trigger,
+            stop_receiver,
+        )
+        .await
+        {
             let message = shortcuts::describe_error(&error);
             tracing::warn!(%error, "global shortcut registration failed");
             let _ = error_sender.send(ShortcutEvent::Failed(message)).await;
@@ -918,12 +1163,63 @@ fn register_shortcuts(state: &Rc<AppState>) {
     });
 }
 
+fn setup_tray(state: &Rc<AppState>) {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    match tray::spawn(sender) {
+        Ok(handle) => {
+            state.tray.replace(Some(handle));
+            tracing::debug!("tray service started");
+        }
+        Err(error) => {
+            // Default GNOME has no StatusNotifierItem host unless the
+            // AppIndicator extension is enabled. This is not an error state.
+            tracing::debug!(%error, "tray is unavailable; continuing without it");
+            return;
+        }
+    }
+    let weak = Rc::downgrade(state);
+    glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+        while let Ok(command) = receiver.try_recv() {
+            let Some(state) = weak.upgrade() else {
+                return glib::ControlFlow::Break;
+            };
+            handle_tray_command(&state, command);
+        }
+        glib::ControlFlow::Continue
+    });
+}
+
+fn handle_tray_command(state: &Rc<AppState>, command: TrayCommand) {
+    match command {
+        TrayCommand::CaptureRegion => {
+            state.window.present();
+            start_capture(state, CaptureTarget::Region);
+        }
+        TrayCommand::CaptureScreen => {
+            state.window.present();
+            start_capture(state, CaptureTarget::Screen);
+        }
+        TrayCommand::Show => state.window.present(),
+        TrayCommand::Settings => open_settings(state),
+        TrayCommand::Quit => state.app.quit(),
+    }
+}
+
 fn handle_shortcut_event(state: &Rc<AppState>, event: ShortcutEvent) {
     match event {
-        ShortcutEvent::Registered(descriptions) => {
+        ShortcutEvent::Registered(bindings) => {
             state.shortcut_registered.set(true);
-            tracing::info!(?descriptions, "global shortcuts registered");
-            let message = if descriptions.is_empty() {
+            tracing::info!(?bindings, "global shortcuts registered");
+            let descriptions = bindings
+                .iter()
+                .map(|shortcut| {
+                    format!(
+                        "{} — {} ({})",
+                        shortcut.id, shortcut.description, shortcut.trigger
+                    )
+                })
+                .collect::<Vec<_>>();
+            let summary = if descriptions.is_empty() {
                 "Global shortcuts registered, but the portal returned no trigger description."
                     .to_string()
             } else {
@@ -932,12 +1228,21 @@ fn handle_shortcut_event(state: &Rc<AppState>, event: ShortcutEvent) {
                     descriptions.join("; ")
                 )
             };
-            state.set_status(&message);
-            state.toast(&message);
+            let bound = descriptions.join("; ");
+            {
+                let mut settings = state.settings.borrow_mut();
+                settings.shortcuts.bound_description = bound;
+                settings.sanitize();
+            }
+            persist_settings(state);
+            state.set_status(&summary);
+            state.toast(&summary);
         }
         ShortcutEvent::Failed(message) => {
             state.set_status("Global shortcuts are not registered.");
             state.toast(&message);
+            let parent: gtk::Window = state.window.clone().upcast();
+            settings_ui::show_shortcut_help(&parent, &message);
         }
         ShortcutEvent::Activated(id) => {
             tracing::info!(shortcut = %id, "global shortcut activated");
@@ -977,6 +1282,38 @@ fn show_portal_info(state: &Rc<AppState>) {
             }
         }
     });
+}
+
+fn open_settings(state: &Rc<AppState>) {
+    let parent: gtk::Window = state.window.clone().upcast();
+    let weak = Rc::downgrade(state);
+    let saved = Rc::new(move || {
+        if let Some(state) = weak.upgrade() {
+            state.delay.set(state.settings.borrow().capture.delay);
+        }
+    });
+    let weak = Rc::downgrade(state);
+    let register = Rc::new(move || {
+        if let Some(state) = weak.upgrade() {
+            register_shortcuts(&state);
+        }
+    });
+    settings_ui::present(
+        Rc::clone(&state.settings),
+        state.settings_path.clone(),
+        &parent,
+        settings_ui::Callbacks {
+            on_saved: saved,
+            register_shortcuts: register,
+            open_keyboard_settings: Rc::new(open_keyboard_settings),
+        },
+    );
+}
+
+fn open_keyboard_settings() {
+    if let Err(error) = settings_ui::open_keyboard_settings() {
+        tracing::warn!(%error, "could not open the system keyboard settings");
+    }
 }
 
 fn show_about(state: &AppState) {

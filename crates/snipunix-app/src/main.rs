@@ -3,7 +3,10 @@
 mod app;
 mod cli;
 mod editor;
+mod onboarding;
+mod settings_ui;
 mod shortcuts;
+mod tray;
 
 use std::process::ExitCode;
 
@@ -46,6 +49,14 @@ fn real_main() -> Result<ExitCode> {
                 print_portal_info()?;
                 return Ok(ExitCode::SUCCESS);
             }
+            if cli.download_ocr_models {
+                download_ocr_models(cli.ocr_models.as_deref())?;
+                return Ok(ExitCode::SUCCESS);
+            }
+            if let Some(path) = cli.ocr.as_deref() {
+                run_ocr(path, cli.ocr_models.as_deref(), cli.remove_line_breaks)?;
+                return Ok(ExitCode::SUCCESS);
+            }
 
             // Headless scripting path: full-screen capture straight to a file,
             // without initialising GTK.
@@ -75,6 +86,37 @@ fn capture_screen_to_file(output: &std::path::Path) -> Result<()> {
         image.height(),
         output.display()
     );
+    Ok(())
+}
+
+fn download_ocr_models(directory: Option<&std::path::Path>) -> Result<()> {
+    let directory = directory.map_or_else(
+        || snipunix_settings::Settings::default().model_directory(),
+        std::path::Path::to_path_buf,
+    );
+    let models = snipunix_ocr::download_models(&directory)
+        .with_context(|| format!("failed to download OCR models to {}", directory.display()))?;
+    println!("Detected model: {}", models.detection.display());
+    println!("Recognition model: {}", models.recognition.display());
+    Ok(())
+}
+
+fn run_ocr(
+    path: &std::path::Path,
+    model_directory: Option<&std::path::Path>,
+    remove_line_breaks: bool,
+) -> Result<()> {
+    let bytes =
+        std::fs::read(path).with_context(|| format!("failed to read image {}", path.display()))?;
+    let image = snipunix_capture::decode_image(&bytes, Some(path.display().to_string()))
+        .map_err(|error| anyhow::anyhow!(error))
+        .with_context(|| format!("failed to decode image {}", path.display()))?;
+    let models = snipunix_ocr::ModelPaths::discover(model_directory)
+        .map_err(|error| anyhow::anyhow!(error))?;
+    let result = snipunix_ocr::recognize(image.rgba(), image.width(), image.height(), &models)
+        .map_err(|error| anyhow::anyhow!(error))
+        .context("OCR failed")?;
+    println!("{}", result.text(remove_line_breaks));
     Ok(())
 }
 

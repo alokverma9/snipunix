@@ -12,7 +12,6 @@ use snipunix_core::{HANDLE_SIZE, Handle, LogicalPoint, LogicalRect, SelectionPha
 
 use crate::OverlayState;
 
-const DIM: gdk::RGBA = gdk::RGBA::new(0.0, 0.0, 0.0, 0.40);
 const ACCENT: gdk::RGBA = gdk::RGBA::new(0.208, 0.518, 0.894, 1.0);
 const TEXT: gdk::RGBA = gdk::RGBA::new(1.0, 1.0, 1.0, 0.95);
 const CROSSHAIR: gdk::RGBA = gdk::RGBA::new(1.0, 1.0, 1.0, 0.5);
@@ -80,8 +79,9 @@ mod imp {
 
             // Dim everything, then redraw the undimmed frozen image inside the
             // selection hole.
+            let dim = gdk::RGBA::new(0.0, 0.0, 0.0, state.dim_strength);
             snapshot.append_color(
-                &DIM,
+                &dim,
                 &graphene::Rect::new(0.0, 0.0, width as f32, height as f32),
             );
 

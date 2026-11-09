@@ -14,9 +14,22 @@
     </p>
     <p>
       The annotation editor adds pen, highlighter, line, arrow, rectangle,
-      ellipse, text, eraser, and crop tools with undo and redo, plus selection,
-      move, and resize. Copy the annotated result to the clipboard or export it
-      as PNG, JPEG, or WebP from a native save dialog.
+      ellipse, text, eraser, crop, and opaque redaction tools with undo and
+      redo, plus selection, move, and resize. Copy the annotated result to the
+      clipboard or export it as PNG, JPEG, or WebP from a native save dialog.
+    </p>
+    <p>
+      Text recognition runs entirely on this device with a bundled local model.
+      Extracted text can be copied or have its line breaks removed, and detected
+      email addresses and phone numbers can be covered with undoable redaction
+      blocks. The models are installed with the application; downloading is an
+      explicit opt-in for host builds.
+    </p>
+    <p>
+      Settings and onboarding cover capture defaults, rebindable global
+      shortcuts, save folders and formats, local OCR options, and overlay
+      appearance. A best-effort tray exposes capture, settings, and quit when
+      the desktop provides a StatusNotifierItem host.
     </p>
     <p>
       Images stay in memory until you save them. Snipunix works locally, does
@@ -37,6 +50,17 @@
   </developer>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.0" date="2026-11-09">
+      <description>
+        <p>
+          M3: local English OCR with selectable text and line-break control,
+          detected email and phone redaction, persisted settings and first-run
+          onboarding, rebindable global shortcuts with a fallback guide, a
+          best-effort StatusNotifierItem tray, and Flatpak/deb packages that
+          bundle the OCR models.
+        </p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-11-09">
       <description>
         <p>

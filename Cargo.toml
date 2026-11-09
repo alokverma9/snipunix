@@ -4,12 +4,14 @@ members = [
     "crates/snipunix-core",
     "crates/snipunix-capture",
     "crates/snipunix-annotate",
+    "crates/snipunix-settings",
+    "crates/snipunix-ocr",
     "crates/snipunix-overlay",
     "crates/snipunix-app",
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-or-later"
@@ -20,6 +22,8 @@ repository = "https://github.com/alokverma9/snipunix"
 snipunix-core = { path = "crates/snipunix-core" }
 snipunix-capture = { path = "crates/snipunix-capture" }
 snipunix-annotate = { path = "crates/snipunix-annotate" }
+snipunix-settings = { path = "crates/snipunix-settings" }
+snipunix-ocr = { path = "crates/snipunix-ocr" }
 snipunix-overlay = { path = "crates/snipunix-overlay" }
 
 gtk = { package = "gtk4", version = "0.11.5", features = ["v4_12"] }
@@ -43,6 +47,17 @@ cosmic-text = { version = "0.19.0", default-features = false, features = [
     "std",
     "swash",
     "fontconfig",
+] }
+serde = { version = "1", features = ["derive"] }
+toml = "1.2"
+sha2 = "0.10"
+ureq = "3.5"
+ocrs = { version = "0.14", default-features = false, features = ["rten"] }
+rten = "0.28"
+rten-imageproc = "0.28"
+ksni = { version = "0.3.7", default-features = false, features = [
+    "blocking",
+    "async-io",
 ] }
 thiserror = "2"
 anyhow = "1"

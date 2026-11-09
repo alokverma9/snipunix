@@ -3,35 +3,40 @@
 **Screenshot. Annotate. Share.**
 
 Snipunix is a Linux screenshot tool built for GNOME Wayland. This repository is
-the **M2 prototype**: portal capture, a frozen-image region overlay with
+the **M3 product**: portal capture, a frozen-image region overlay with
 move/resize handles, a magnifier, a delay countdown, clipboard copy, Save As,
-Adjust Region, and a non-destructive annotation editor with PNG/JPEG/WebP
-export. OCR, secure redaction, sharing, recording, and cloud features are not
-part of M2.
+Adjust Region, a non-destructive annotation editor with PNG/JPEG/WebP export,
+local OCR with text extraction and opaque redaction, persisted settings,
+rebindable global shortcuts, a best-effort tray, first-run onboarding, and
+Flatpak/deb packages.
+
+Everything stays on the device. OCR uses a local ONNX model, and no screenshot
+or recognised text is sent anywhere. The only network operation is an explicit,
+user-initiated OCR model download for host builds that do not already have the
+models installed.
 
 ## Status
 
-| Area | M2 state |
+| Area | M3 state |
 | --- | --- |
 | Full-screen capture | Works through `org.freedesktop.portal.Screenshot` v2 |
 | Headless CLI capture | `snipunix --capture screen --output PATH` |
 | Region selection | Frozen desktop, one fullscreen window per monitor, capture on mouse release |
 | Move / resize | Eight handles, inside-drag move, keyboard nudge, minimum 8×8 logical px |
-| Magnifier | 8× nearest-neighbour while dragging or resizing |
-| Delay | `--delay 0..10` and a GUI spin button; countdown can be cancelled |
+| Magnifier | 8× nearest-neighbour; configurable on/off and dim strength |
+| Delay | `--delay 0..10`, GUI spin button, and persisted setting; cancellable countdown |
 | Clipboard | Raw crop copied automatically on capture; Copy Annotated in the editor |
 | Preview actions | Copy, Save As…, Annotate, Adjust Region |
-| Adjust | Reopens the overlay with the previous rectangle and handles; Enter / Ctrl+C confirms |
-| Cancel | Escape, right-click |
-| Saving | `--output PATH`, a GUI Save As dialog, and PNG/JPEG/WebP export |
 | Annotation editor | Pen, highlighter, line, arrow, rectangle, ellipse, text, eraser, crop |
-| Selection | Move/resize with eight handles; edit text with a double-click |
-| Undo / redo | Every edit, including crop and property changes; bounded history |
-| Rendering | One tiny-skia + cosmic-text pipeline shared by screen and export |
-| Resident window | Closing the window hides it while Snipunix owns the clipboard; Quit exits |
-| Global shortcuts | Prototype, registered at runtime through the GlobalShortcuts portal |
-| Flatpak | Manifest, offline source list, and a verified 0.3.0 build |
-| OCR / QR / secure redaction / recording / audio / cloud | Not implemented (later milestones) |
+| Local OCR | `ocrs`/`rten` engine, bundled pinned models, line/word boxes, email/phone detection |
+| OCR editor flow | Extract Text, selectable result, line-break and auto-copy options, Copy All, Redact detected |
+| Redaction | Opaque black annotation, compound undo, destructive pixels in exports |
+| Settings | Capture, Shortcuts, Files, Text Recognition, Appearance, About; saved immediately |
+| Onboarding | First-run permission priming, shortcut setup, save folder, privacy summary |
+| Global shortcuts | Configured triggers, returned-description display, rebind, failure guidance |
+| Tray | Best-effort StatusNotifierItem: capture, show, settings, quit |
+| Packaging | Flatpak 0.4.0 and `snipunix_0.4.0_amd64.deb`, both with OCR models |
+| X11 capture / recording / audio / cloud / AI / telemetry / background service | Not implemented (out of scope) |
 
 Tested on Ubuntu 26.04, GNOME 50.1, Wayland, one 1920×1080 monitor. See
 [Known limitations](#known-limitations) before relying on any behaviour.
@@ -42,6 +47,7 @@ Tested on Ubuntu 26.04, GNOME 50.1, Wayland, one 1920×1080 monitor. See
 - GTK 4 and libadwaita development files
 - `xdg-desktop-portal` with the GNOME backend
 - Flatpak and `flatpak-builder` only for the Flatpak build
+- `dpkg-deb` only for the deb build
 
 On Ubuntu:
 
@@ -62,8 +68,15 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-M2 has **84 passing tests**: 40 annotation, 29 core, 8 capture, 5 app, 2
-overlay. See [docs/M2_TEST_EVIDENCE.md](docs/M2_TEST_EVIDENCE.md).
+M3 has **105 passing tests**: 43 annotation, 29 core, 8 capture, 6 app, 2 overlay,
+9 OCR, and 8 settings. The two model-gated OCR tests need the pinned models:
+
+```sh
+SNIPUNIX_OCR_TEST_MODELS=/path/to/models cargo test --workspace
+```
+
+See [docs/M3_TEST_EVIDENCE.md](docs/M3_TEST_EVIDENCE.md) for commands, outputs,
+and the verification gaps.
 
 ## Run
 
@@ -91,13 +104,33 @@ Wait five seconds before freezing the screen:
 ./target/debug/snipunix --capture region --delay 5
 ```
 
+Recognise text in an existing image and print it:
+
+```sh
+./target/debug/snipunix --ocr /tmp/snipunix-screen.png \
+    --ocr-models /path/to/models
+```
+
+Join recognised lines with spaces:
+
+```sh
+./target/debug/snipunix --ocr /tmp/snipunix-screen.png \
+    --ocr-models /path/to/models --remove-line-breaks
+```
+
+Download and verify the pinned models into a directory:
+
+```sh
+./target/debug/snipunix --download-ocr-models --ocr-models /path/to/models
+```
+
 Show portal capabilities:
 
 ```sh
 ./target/debug/snipunix --portal-info
 ```
 
-Register the prototype global shortcuts:
+Register the configured global shortcuts:
 
 ```sh
 ./target/debug/snipunix --register-shortcuts
@@ -139,10 +172,12 @@ selection before release.
 ### Preview and clipboard
 
 - **Copy** (Ctrl+C) copies the current crop again.
-- **Save As…** (Ctrl+S) opens a native PNG save dialog with a timestamped name.
-- **Annotate** opens the non-destructive editor (see below).
+- **Save As…** (Ctrl+S) opens a native save dialog with a timestamped name and
+  the configured format.
+- **Annotate** opens the non-destructive editor.
 - **Adjust Region** reopens the frozen overlay for the last region.
-- The crop is copied automatically after every capture and adjustment.
+- The crop is copied automatically after every capture and adjustment when
+  **Copy after capture** is enabled.
 - Snipunix stays resident while it owns the clipboard: closing the main window
   hides it instead of exiting. Use the menu **Quit** or Ctrl+Q to exit and
   release the clipboard.
@@ -181,34 +216,67 @@ the target exists, Snipunix asks before replacing it. Exports contain no capture
 metadata. **Close Editor** returns to the preview bar, and a new capture closes
 any open editor.
 
-### Delay
+## Local OCR and redaction
 
-`--delay 0..10` (and the toolbar spin button) starts a transparent fullscreen
-countdown on the primary monitor. The countdown is destroyed before the portal
-request, so it cannot appear in the screenshot. Clicking the countdown or
-pressing Escape cancels without taking a screenshot.
+**Extract Text** renders the current composed crop through the same tiny-skia
+pipeline used for export, including annotations and redactions, then runs OCR on
+a worker thread so the window stays responsive.
 
-## Portal permissions
+The result dialog shows:
 
-The first screenshot request may show a desktop permission dialog. On GNOME,
-the persisted decision is also visible under **Settings → Privacy →
-Screenshots**. If the request is denied, Snipunix shows a typed error instead of
-panicking:
+- selectable monospace text and a line count;
+- every recognised line box drawn on the canvas, clickable to select that line;
+- **Remove line breaks** and **Auto-copy** toggles;
+- **Copy All**;
+- **Redact detected**;
+- **Close**.
 
-- `PermissionDenied` / `PermissionDeniedWithDetail`
-- `Cancelled` / `CancelledWithDetail`
-- `PortalUnavailable`
-- `Timeout` (15 seconds)
+`Redact detected` finds email addresses and phone numbers and covers them with
+opaque black boxes. The boxes are ordinary `Redaction` annotations: they move,
+resize, hit-test, undo, and export with the rest of the document. A multi-box
+redaction is one undo step. Re-running OCR on the redacted result finds no
+sensitive text.
 
-Snipunix hides its own window before requesting the capture and waits 180 ms so
-the compositor removes it; the app window does not appear in the screenshot.
+OCR model discovery checks, in order: the explicit `--ocr-models` directory,
+`SNIPUNIX_OCR_MODEL_DIR`, the settings model directory, XDG data directories,
+`/usr/share/snipunix/models`, and `/app/share/snipunix/models`. Flatpak and deb
+install both pinned files, so installed builds need no download.
 
-The Screenshot portal writes a temporary `Screenshot-*.png` file (usually in
-`~/Pictures`). Snipunix reads it, removes it when the path looks like a
-portal-created screenshot, and keeps the pixels in memory. Portal cleanup is
-best-effort; a failure is logged and never blocks the capture.
+The model URLs and SHA-256 digests are constants:
 
-## Global shortcuts (prototype)
+| File | SHA-256 |
+| --- | --- |
+| `text-detection.onnx` | `a917b23dbd9524b465df7e922641b3ff2981623df4ded5a0234004ef2fee7cfe` |
+| `text-recognition.onnx` | `86c145c2edb96c8caed5b1ebb8f44d706408922211451c309c625157dd6061c5` |
+
+## Settings and onboarding
+
+Open **Settings…** from the menu or press `Ctrl+,`. The preferences dialog has
+six pages:
+
+- **Capture** — default mode, delay, copy after capture, remember last region.
+- **Shortcuts** — register on startup, region/screen triggers, Register Now, and
+  the trigger descriptions the portal actually returned.
+- **Files** — auto-save, save folder, filename template, format, JPEG quality.
+- **Text Recognition** — auto-copy, remove line breaks, model folder, Download
+  Models.
+- **Appearance** — magnifier, dim strength, reduced motion.
+- **About** — version, app ID, license, and the local-processing statement.
+
+Every control saves immediately. Numeric values are clamped before they are
+written, and the file is written atomically.
+
+Location: `$XDG_CONFIG_HOME/snipunix/settings.toml` (normally
+`~/.config/snipunix/settings.toml`). A missing file means defaults; invalid TOML
+is reported as a typed error and the app falls back to defaults instead of
+crashing.
+
+On first launch, a welcome dialog explains the screenshot portal, offers to
+register global shortcuts, lets the user choose a save folder, and repeats the
+privacy guarantee. **Skip**, **Get Started**, and closing the window all mark
+onboarding complete so it does not return on every launch.
+
+## Global shortcuts
 
 The portal identifies callers by application ID. A host build must have a
 matching desktop entry installed, otherwise GNOME returns
@@ -231,22 +299,68 @@ Snipunix asks `org.freedesktop.host.portal.Registry` to give the process the
 `io.github.alokverma9.snipunix` identity before calling the GlobalShortcuts
 portal.
 
+The default triggers are:
+
 - `Ctrl+Shift+S` — capture a region
 - `Ctrl+Shift+A` — capture the full screen
 
-In testing GNOME accepted both bindings and delivered them while another window
-was focused. **The shortcuts are session-scoped:** closing Snipunix stops the
-listener, so they only work while the application is running. Persistent
-shortcuts that launch a closed application need a background/autostart service,
-which is outside the current milestones.
+The portal may remap a request. Snipunix displays and persists the
+`trigger_description` the portal returned rather than claiming the requested
+binding was accepted. On refusal or cancellation it opens a fallback dialog with
+the exact GNOME/KDE paths, manual commands, and an **Open Keyboard Settings**
+action.
 
-Inside Flatpak the app ID comes from the sandbox; host registration is skipped.
+**The shortcuts are session-scoped:** closing Snipunix stops the listener, so
+they only work while the application is running. Persistent shortcuts that
+launch a closed application need a background/autostart service, which is
+outside the current milestones. Inside Flatpak the app ID comes from the
+sandbox; host registration is skipped.
 
-## Flatpak
+## Tray
 
-The manifest is `flatpak/io.github.alokverma9.snipunix.json`. The Cargo source
-list is generated from `Cargo.lock`, so the build does not need network access
-inside the sandbox.
+Snipunix registers a StatusNotifierItem with Capture Region, Capture Screen,
+Show Snipunix, Settings…, and Quit. On default GNOME the icon only appears when
+an AppIndicator/StatusNotifier extension is enabled.
+
+The tray is best-effort by design. If the service or watcher is unavailable, the
+failure is logged at debug level and the app continues without a toast or modal;
+every tray action also exists in the window and CLI. Inside Flatpak the
+well-known D-Bus name is disabled so the sandbox owns it normally.
+
+## Delay
+
+`--delay 0..10` and the Capture settings page start a transparent fullscreen
+countdown on the primary monitor. The countdown is destroyed before the portal
+request, so it cannot appear in the screenshot. Clicking the countdown or
+pressing Escape cancels without taking a screenshot.
+
+## Portal permissions
+
+The first screenshot request may show a desktop permission dialog. On GNOME,
+the persisted decision is also visible under **Settings → Privacy →
+Screenshots**. If the request is denied, Snipunix shows a typed error and a
+privacy-settings dialog with an action that opens the relevant panel:
+
+- `PermissionDenied` / `PermissionDeniedWithDetail`
+- `Cancelled` / `CancelledWithDetail`
+- `PortalUnavailable`
+- `Timeout` (15 seconds)
+
+Snipunix hides its own window before requesting the capture and waits 180 ms so
+the compositor removes it; the app window does not appear in the screenshot.
+
+The Screenshot portal writes a temporary `Screenshot-*.png` file (usually in
+`~/Pictures`). Snipunix reads it, removes it when the path looks like a
+portal-created screenshot, and keeps the pixels in memory. Portal cleanup is
+best-effort; a failure is logged and never blocks the capture.
+
+## Packaging
+
+### Flatpak
+
+The manifest is `flatpak/io.github.alokverma9.snipunix.json`. It has two modules:
+`snipunix-ocr-models` downloads the two ONNX files with pinned SHA-256 digests,
+and `snipunix` builds offline from `flatpak/cargo-sources.json`.
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub \
@@ -266,9 +380,10 @@ flatpak-builder --user --install --force-clean --disable-rofiles-fuse \
 flatpak run io.github.alokverma9.snipunix
 ```
 
-`--disable-rofiles-fuse` avoids a rofiles-fuse dependency on hosts that do not
-have it. The build itself is offline: every crate is extracted from the
-generated source list.
+M3 was built and installed as version 0.4.0 (commit
+`9a4200f52d6ab6ba065210622c2237ffff2333c79be767e6d08390605f210958`) from 601
+generated Cargo sources. The models are at `/app/share/snipunix/models`, and
+sandboxed OCR runs without a model-path override or network access.
 
 Headless capture inside the sandbox, with `/tmp` shared only for this test:
 
@@ -284,28 +399,47 @@ portal. In the sandbox the portal returns a document-portal path such as
 best-effort deletion logs a warning and the document portal manages its
 lifetime.
 
-M2 was built and installed as version 0.3.0 (commit
-`61fa3a29482ab8b269a3a44071087a43e6f48d8a61d59e91d3db07836b9272e2`) from 433
-generated Cargo sources. Headless capture, the annotation editor, Copy
-Annotated, and PNG export were exercised inside the sandbox. Stop any host
-`snipunix` process before launching the Flatpak: both use the same application
-ID, so the host instance would receive the activation.
+Stop any host `snipunix` process before launching the Flatpak: both use the same
+application ID, so the host instance would receive the activation.
+
+### deb
+
+```sh
+packaging/build-deb.sh
+```
+
+The script builds a release binary, uses models from `SNIPUNIX_MODELS` or
+downloads/verifies them with `snipunix --download-ocr-models`, stages the
+binary, desktop entry, metainfo, icon, copyright, and both model files, then
+calls `dpkg-deb`.
+
+```text
+dist/snipunix_0.4.0_amd64.deb
+Depends:    libgtk-4-1, libadwaita-1-0, xdg-desktop-portal
+Recommends: xdg-desktop-portal-gnome
+Models:     /usr/share/snipunix/models
+```
 
 ## Repository layout
 
 ```text
 crates/snipunix-core      Geometry, monitor layout, coordinate mapping,
-                          selection state machine (move/resize/nudge), RGBA crop
+                          selection state machine, RGBA crop
 crates/snipunix-capture   Portal screenshot backend, URI handling, PNG decode,
                           portal probe
 crates/snipunix-annotate  Document model, geometry, undo history, view
-                          transform, shared renderer, PNG/JPEG/WebP export
+                          transform, shared renderer, redaction, PNG/JPEG/WebP
+crates/snipunix-settings  Settings model, XDG path, TOML, clamping, atomic save
+crates/snipunix-ocr       ocrs/rten pipeline, text/box model, PII detection,
+                          model discovery, verified download, pixel redaction
 crates/snipunix-overlay   GDK monitor discovery, fullscreen overlay windows,
                           GSK renderer, handles, magnifier, countdown
 crates/snipunix-app       CLI, libadwaita shell, preview bar, clipboard,
-                          Save As, Adjust Region, annotation editor, shortcuts
+                          annotation editor, OCR dialog, settings UI,
+                          onboarding, shortcuts, tray
 data/                     Desktop entry, AppStream metadata, icon
 flatpak/                  Manifest and Cargo source generator
+packaging/                Reproducible deb builder
 docs/                     Architecture, dependencies, test evidence
 ```
 
@@ -313,7 +447,8 @@ docs/                     Architecture, dependencies, test evidence
 
 - **One monitor was available for live testing.** Per-monitor windows and
   virtual-desktop coordinates are implemented, but multi-monitor and mixed-DPI
-  behaviour were not exercised on hardware. Do not treat them as validated.
+  behaviour were not exercised on hardware. OCR and redaction box mapping were
+  not certified across mixed-DPI monitors either.
 - The portal does not report monitor geometry. Snipunix derives one uniform
   scale per axis from the GDK bounding box and the image size. Mixed-DPI desktops
   can therefore crop incorrectly.
@@ -330,27 +465,46 @@ docs/                     Architecture, dependencies, test evidence
   unaffected because it does not start GTK.
 - Global shortcuts stop working when the app process exits. Registration is
   session-scoped; there is no background service or autostart entry.
-- The Flatpak build was validated on this host; other runtimes and distributions
-  are untested.
-- X11 is only a fallback socket in the manifest. M2 was tested on Wayland; X11
+- The tray icon requires an AppIndicator/StatusNotifier extension on GNOME. The
+  app works without it, but the icon is not visible on a stock shell.
+- The bundled OCR models are English text models. Other languages would need
+  different models installed in a searched directory; the app does not ship a
+  language picker.
+- `Redact detected` covers email addresses and phone numbers found by the
+  heuristic. It is not a guarantee that every sensitive string was found; use
+  manual rectangles for anything else.
+- Debug builds run OCR slowly on large screenshots. The release binary is the
+  supported path for real captures; the UI stays responsive because OCR runs on
+  a worker thread.
+- A host build without bundled models needs an explicit `--download-ocr-models`
+  or an installed model directory. The app never downloads automatically from
+  the capture or OCR flow.
+- GUI automation coverage is partial: `ydotool` pointer clicks were unreliable
+  on the test GNOME session, so the OCR dialog, settings tabs, toggles, and
+  onboarding completion were verified by rendering and unit/model tests rather
+  than an automated end-to-end click path. See the test evidence for details.
+- The Flatpak and deb were validated on this host only. The deb was inspected
+  from a staging root, not installed into the live system.
+- X11 is only a fallback socket in the manifest. M3 was tested on Wayland; X11
   interaction was not validated on a real session.
 - WebP export is lossless because `image 0.25.10` only exposes the lossless
   WebP encoder; there is no WebP quality control.
-- JPEG quality is fixed at 90 in the UI; the encoder itself accepts 1–100.
 - Annotation text uses the system font resolved by fontconfig. Screen and export
   share the resolved layout, but the exact typeface can differ across machines.
 - Crop is rectangular only; there is no freeform, rotated, or content-aware
-  crop, and no secure redaction/pixelation in this milestone.
-- Multi-monitor and mixed-DPI annotation/export were not certified.
-- Automated tests cover pure logic and real host interaction through `ydotool`;
+  crop. Redaction is an opaque rectangle, not reversible blur or pixelation.
+- Automated tests cover pure logic, the real OCR engine, and package artifacts;
   they do not cover every compositor/portal version.
 
 ## Documentation
 
-- [M2 architecture](docs/M2_ARCHITECTURE.md)
-- [M2 implementation plan](docs/M2_IMPLEMENTATION_PLAN.md)
-- [M2 test evidence](docs/M2_TEST_EVIDENCE.md)
-- [M2 completion report](M2_COMPLETION_REPORT.md)
+- [M3 architecture](docs/M3_ARCHITECTURE.md)
+- [M3 implementation plan](docs/M3_IMPLEMENTATION_PLAN.md)
+- [M3 test evidence](docs/M3_TEST_EVIDENCE.md)
+- [M3 completion report](M3_COMPLETION_REPORT.md)
+- [M2 architecture](docs/M2_ARCHITECTURE.md),
+  [plan](docs/M2_IMPLEMENTATION_PLAN.md), and
+  [test evidence](docs/M2_TEST_EVIDENCE.md) (historical)
 - [M1 architecture](docs/M1_ARCHITECTURE.md) and
   [M1 test evidence](docs/M1_TEST_EVIDENCE.md) (historical)
 - [M0 architecture](docs/M0_ARCHITECTURE.md) and

@@ -230,6 +230,10 @@ impl RenderEngine {
                     stroke_path(pixmap, &path, shape.color, shape.width, transform);
                 }
             }
+            AnnotationKind::Redaction(redaction) => {
+                let path = PathBuilder::from_rect(redaction.rect.to_tiny_skia());
+                fill_path(pixmap, &path, Color::rgb(0, 0, 0), transform);
+            }
             AnnotationKind::Text(text) => {
                 if text.text.is_empty() {
                     return;
@@ -610,7 +614,7 @@ pub enum RenderError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::{Shape, Stroke, Text};
+    use crate::document::{Redaction, Shape, Stroke, Text};
 
     fn base(width: u32, height: u32, color: [u8; 4]) -> Document {
         let mut rgba = Vec::with_capacity((width * height * 4) as usize);
@@ -712,6 +716,25 @@ mod tests {
             .unwrap();
         let head = pixel(&image, 66, 20);
         assert!(head[0] < 40);
+    }
+
+    #[test]
+    fn redaction_covers_its_rectangle_with_opaque_black() {
+        let mut doc = base(60, 40, [40, 90, 200, 255]);
+        add(
+            &mut doc,
+            AnnotationKind::Redaction(Redaction {
+                rect: DocRect::new(10.0, 8.0, 20.0, 12.0),
+            }),
+        );
+        let mut engine = RenderEngine::new();
+        let image = engine
+            .render(&doc, Preview::None, doc.crop_rect(), 1.0)
+            .unwrap();
+        assert_eq!(pixel(&image, 15, 12), [0, 0, 0, 255]);
+        assert_eq!(pixel(&image, 29, 19), [0, 0, 0, 255]);
+        assert_eq!(pixel(&image, 5, 5), [40, 90, 200, 255]);
+        assert_eq!(pixel(&image, 40, 30), [40, 90, 200, 255]);
     }
 
     #[test]

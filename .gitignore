@@ -1,6 +1,7 @@
 /target
 /build-flatpak
 /.flatpak-builder
+/dist
 *.log
 
 ### Rust ###

@@ -162,6 +162,29 @@ impl Editor {
         Ok(())
     }
 
+    /// Adds several annotations as one undoable operation. Quick-redact uses
+    /// this so a multi-box redaction is a single undo step.
+    pub fn add_annotations(&mut self, annotations: Vec<Annotation>) -> Vec<AnnotationId> {
+        if annotations.is_empty() {
+            return Vec::new();
+        }
+        let start = self.document.annotations().len();
+        let ids = annotations
+            .iter()
+            .map(|annotation| annotation.id)
+            .collect::<Vec<_>>();
+        let commands = annotations
+            .into_iter()
+            .enumerate()
+            .map(|(offset, annotation)| Command::Add {
+                index: start + offset,
+                annotation,
+            })
+            .collect::<Vec<_>>();
+        self.execute(Command::Compound(commands));
+        ids
+    }
+
     /// Removes several annotations as one undoable operation.
     pub fn remove_annotations(&mut self, ids: &[AnnotationId]) -> usize {
         let mut targets: Vec<(usize, Annotation)> = ids
@@ -293,7 +316,7 @@ pub enum EditError {
 mod tests {
     use super::*;
     use crate::color::Color;
-    use crate::document::{AnnotationKind, Shape};
+    use crate::document::{AnnotationKind, Redaction, Shape};
     use crate::geometry::DocRect;
     use snipunix_capture::CapturedImage;
 
@@ -377,6 +400,29 @@ mod tests {
         assert!(editor.set_crop(ImageRect::new(0, 0, 0, 0)).is_err());
         assert_eq!(editor.undo_depth(), 0);
         assert_eq!(editor.document().crop(), ImageRect::new(0, 0, 200, 120));
+    }
+
+    #[test]
+    fn compound_redaction_is_one_undo_step() {
+        let mut editor = editor();
+        let first = editor
+            .document
+            .create_annotation(AnnotationKind::Redaction(Redaction {
+                rect: DocRect::new(10.0, 10.0, 30.0, 20.0),
+            }));
+        let second = editor
+            .document
+            .create_annotation(AnnotationKind::Redaction(Redaction {
+                rect: DocRect::new(60.0, 10.0, 30.0, 20.0),
+            }));
+        let ids = editor.add_annotations(vec![first, second]);
+        assert_eq!(ids.len(), 2);
+        assert_eq!(editor.document().annotations().len(), 2);
+        assert_eq!(editor.undo_depth(), 1);
+        assert!(editor.undo());
+        assert_eq!(editor.document().annotations().len(), 0);
+        assert!(editor.redo());
+        assert_eq!(editor.document().annotations().len(), 2);
     }
 
     #[test]

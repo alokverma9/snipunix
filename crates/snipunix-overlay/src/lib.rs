@@ -53,6 +53,8 @@ pub struct OverlayOptions {
     pub initial_selection: Option<LogicalRect>,
     /// Show the pixel magnifier while dragging or resizing.
     pub magnifier: bool,
+    /// Opacity of the dim layer outside the selection, in `0.0..=1.0`.
+    pub dim_strength: f32,
 }
 
 impl Default for OverlayOptions {
@@ -61,6 +63,7 @@ impl Default for OverlayOptions {
             auto_commit_on_release: true,
             initial_selection: None,
             magnifier: true,
+            dim_strength: 0.40,
         }
     }
 }
@@ -137,6 +140,7 @@ pub(crate) struct OverlayState {
     pub(crate) widgets: RefCell<Vec<SelectionWidget>>,
     pub(crate) auto_commit: bool,
     pub(crate) magnifier: bool,
+    pub(crate) dim_strength: f32,
     finished: Cell<bool>,
     on_done: RefCell<Option<DoneCallback>>,
     monitor_handler: RefCell<Option<(gio::ListModel, glib::SignalHandlerId)>>,
@@ -202,6 +206,7 @@ where
         widgets: RefCell::new(Vec::new()),
         auto_commit: options.auto_commit_on_release,
         magnifier: options.magnifier,
+        dim_strength: options.dim_strength.clamp(0.0, 1.0),
         finished: Cell::new(false),
         on_done: RefCell::new(Some(Box::new(on_done))),
         monitor_handler: RefCell::new(None),
@@ -510,6 +515,7 @@ mod tests {
         assert!(options.auto_commit_on_release);
         assert!(options.initial_selection.is_none());
         assert!(options.magnifier);
+        assert!((options.dim_strength - 0.40).abs() < f32::EPSILON);
     }
 
     #[test]

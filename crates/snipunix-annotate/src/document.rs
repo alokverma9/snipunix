@@ -57,6 +57,12 @@ pub struct Shape {
     pub width: f64,
 }
 
+/// An opaque filled rectangle used to remove sensitive pixels from output.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Redaction {
+    pub rect: DocRect,
+}
+
 /// A multiline text box.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Text {
@@ -81,6 +87,10 @@ pub enum AnnotationKind {
     Rectangle(Shape),
     Ellipse(Shape),
     Text(Text),
+    /// Opaque black fill. Used by OCR quick-redact; the pixels really are
+    /// removed from the rendered output, not merely covered by a translucent
+    /// highlight.
+    Redaction(Redaction),
 }
 
 /// A document object with stable identity and image-space geometry.
@@ -119,6 +129,7 @@ impl Annotation {
                 text.width.max(1.0),
                 text.height.max(text.font_size),
             ),
+            AnnotationKind::Redaction(redaction) => redaction.rect,
         }
     }
 
@@ -148,6 +159,9 @@ impl Annotation {
             AnnotationKind::Text(text) => {
                 text.origin.x += dx;
                 text.origin.y += dy;
+            }
+            AnnotationKind::Redaction(redaction) => {
+                redaction.rect = redaction.rect.translate(dx, dy);
             }
         }
     }
@@ -212,6 +226,9 @@ impl Annotation {
                 text.width = to.width.max(text.font_size * 2.0);
                 text.height = to.height.max(text.font_size);
             }
+            AnnotationKind::Redaction(redaction) => {
+                redaction.rect = to;
+            }
         }
     }
 
@@ -244,6 +261,9 @@ impl Annotation {
                 .expand(shape.width.max(1.0) / 2.0 + tolerance)
                 .contains(point),
             AnnotationKind::Text(_) => self.bounds().expand(tolerance).contains(point),
+            AnnotationKind::Redaction(redaction) => {
+                redaction.rect.expand(tolerance).contains(point)
+            }
         }
     }
 
@@ -255,6 +275,7 @@ impl Annotation {
             AnnotationKind::Arrow(arrow) => arrow.color,
             AnnotationKind::Rectangle(shape) | AnnotationKind::Ellipse(shape) => shape.color,
             AnnotationKind::Text(text) => text.color,
+            AnnotationKind::Redaction(_) => Color::rgb(0, 0, 0),
         }
     }
 
@@ -269,6 +290,7 @@ impl Annotation {
                 shape.color = color;
             }
             AnnotationKind::Text(text) => text.color = color,
+            AnnotationKind::Redaction(_) => {}
         }
         next
     }
@@ -285,6 +307,7 @@ impl Annotation {
                 shape.width = width;
             }
             AnnotationKind::Text(text) => text.font_size = width.clamp(6.0, 256.0),
+            AnnotationKind::Redaction(_) => {}
         }
         next
     }
@@ -581,6 +604,24 @@ mod tests {
         };
         assert!(annotation.hit_test(DocPoint::new(50.0, 1.0), 1.0));
         assert!(!annotation.hit_test(DocPoint::new(50.0, 20.0), 1.0));
+    }
+
+    #[test]
+    fn redaction_bounds_move_resize_and_hit_test() {
+        let mut annotation = Annotation {
+            id: AnnotationId(11),
+            kind: AnnotationKind::Redaction(Redaction {
+                rect: DocRect::new(10.0, 20.0, 30.0, 40.0),
+            }),
+        };
+        assert_eq!(annotation.bounds(), DocRect::new(10.0, 20.0, 30.0, 40.0));
+        assert_eq!(annotation.color(), Color::rgb(0, 0, 0));
+        assert!(annotation.hit_test(DocPoint::new(20.0, 30.0), 0.0));
+        assert!(!annotation.hit_test(DocPoint::new(80.0, 80.0), 0.0));
+        annotation.translate(5.0, -5.0);
+        assert_eq!(annotation.bounds(), DocRect::new(15.0, 15.0, 30.0, 40.0));
+        annotation.resize_to(DocRect::new(0.0, 0.0, 60.0, 30.0));
+        assert_eq!(annotation.bounds(), DocRect::new(0.0, 0.0, 60.0, 30.0));
     }
 
     #[test]
