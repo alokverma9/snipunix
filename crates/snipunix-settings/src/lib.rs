@@ -160,6 +160,8 @@ pub struct CaptureSettings {
     pub delay: u32,
     pub copy_after_capture: bool,
     pub remember_last_region: bool,
+    /// Draw the pointer into native X11 captures.
+    pub include_cursor: bool,
 }
 
 impl Default for CaptureSettings {
@@ -169,6 +171,7 @@ impl Default for CaptureSettings {
             delay: 0,
             copy_after_capture: true,
             remember_last_region: true,
+            include_cursor: false,
         }
     }
 }

@@ -437,10 +437,14 @@ fn resize_rect(
     top = top.clamp(bounds.y, bounds.bottom() - MIN_SELECTION_SIZE);
     bottom = bottom.clamp(bounds.y + MIN_SELECTION_SIZE, bounds.bottom());
 
-    LogicalRect::from_corners(
+    // Ensure the fixed (non-dragged) edges never escape bounds even when the
+    // origin rect was already slightly outside due to floating-point drift or
+    // a prior resize that accumulated rounding error.
+    let rect = LogicalRect::from_corners(
         LogicalPoint::new(left, top),
         LogicalPoint::new(right, bottom),
-    )
+    );
+    clamp_inside(bounds, rect)
 }
 
 #[cfg(test)]

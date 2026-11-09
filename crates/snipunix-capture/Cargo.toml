@@ -16,6 +16,7 @@ tracing.workspace = true
 async-io.workspace = true
 futures-lite.workspace = true
 url.workspace = true
+x11rb.workspace = true
 
 [lints.rust]
 unsafe_code = "forbid"

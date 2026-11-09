@@ -10,7 +10,7 @@ use tracing::{info, warn};
 
 use crate::image::{ImageError, decode_image};
 use crate::uri::{UriError, portal_uri_to_file};
-use crate::{CaptureBackend, CaptureFuture, CaptureOptions};
+use crate::{CaptureBackend, CaptureFrame, CaptureFuture, CaptureOptions};
 
 /// The portal can hang when a backend is wedged. Match the value used by
 /// existing screenshot tools (Flameshot) and fail loudly after this long.
@@ -43,6 +43,11 @@ impl PortalScreenshot {
 impl CaptureBackend for PortalScreenshot {
     fn capture(&self, options: CaptureOptions) -> CaptureFuture<'_> {
         Box::pin(async move {
+            if options.window.is_some() {
+                return Err(CaptureError::Unsupported(
+                    "window capture is only available through the X11 backend".to_string(),
+                ));
+            }
             let request = Screenshot::request()
                 .interactive(options.interactive)
                 .modal(false)
@@ -81,7 +86,9 @@ impl CaptureBackend for PortalScreenshot {
                 }
             }
 
-            decode_image(&bytes, Some(uri)).map_err(CaptureError::Image)
+            decode_image(&bytes, Some(uri))
+                .map(CaptureFrame::new)
+                .map_err(CaptureError::Image)
         })
     }
 }
@@ -132,6 +139,12 @@ pub enum CaptureError {
     },
     #[error("failed to decode captured screenshot: {0}")]
     Image(#[source] ImageError),
+    #[error("X11 capture is unavailable: {0}")]
+    X11Unavailable(String),
+    #[error("X11 capture failed: {0}")]
+    X11(String),
+    #[error("capture is not supported by this backend: {0}")]
+    Unsupported(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -33,6 +33,9 @@ mod imp {
         pub(crate) remaining: Cell<u32>,
         pub(crate) width: Cell<i32>,
         pub(crate) height: Cell<i32>,
+        /// When set, the sweeping ring is replaced by a static countdown
+        /// numeral so the animation can be disabled.
+        pub(crate) reduced_motion: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -69,7 +72,9 @@ mod imp {
 
             let center = LogicalPoint::new(width / 2.0, height / 2.0);
             let radius = 96.0;
-            draw_ring(snapshot, center, radius, self.fraction.get());
+            if !self.reduced_motion.get() {
+                draw_ring(snapshot, center, radius, self.fraction.get());
+            }
 
             let text = self.remaining.get().to_string();
             let layout = widget.create_pango_layout(Some(&text));
@@ -105,12 +110,21 @@ glib::wrapper! {
 }
 
 impl CountdownWidget {
-    fn new(total_seconds: u32, width: i32, height: i32) -> Self {
+    fn new(total_seconds: u32, width: i32, height: i32, reduced_motion: bool) -> Self {
         let widget: Self = glib::Object::new();
         widget.imp().fraction.set(1.0);
         widget.imp().remaining.set(total_seconds.max(1));
         widget.imp().width.set(width);
         widget.imp().height.set(height);
+        widget.imp().reduced_motion.set(reduced_motion);
+        widget.update_property(&[
+            gtk::accessible::Property::Label("Snipunix capture countdown"),
+            gtk::accessible::Property::Description(
+                "A screenshot will be taken when the countdown reaches zero. Press Escape or \
+                 click to cancel.",
+            ),
+            gtk::accessible::Property::KeyShortcuts("Escape"),
+        ]);
         widget
     }
 
@@ -149,6 +163,7 @@ fn draw_ring(snapshot: &gtk::Snapshot, center: LogicalPoint, radius: f64, fracti
 pub fn start_countdown<F>(
     app: &impl IsA<gtk::Application>,
     seconds: u32,
+    reduced_motion: bool,
     on_done: F,
 ) -> Result<(), OverlayError>
 where
@@ -183,7 +198,7 @@ where
     window.add_css_class("snipunix-countdown");
     window.set_opacity(0.0);
     let geometry = monitor.geometry();
-    let widget = CountdownWidget::new(seconds, geometry.width(), geometry.height());
+    let widget = CountdownWidget::new(seconds, geometry.width(), geometry.height(), reduced_motion);
     widget.set_hexpand(true);
     widget.set_vexpand(true);
     window.set_child(Some(&widget));

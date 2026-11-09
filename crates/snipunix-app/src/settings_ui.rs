@@ -140,6 +140,17 @@ fn capture_page(context: &Context) -> adw::PreferencesPage {
     });
     group.add(&remember);
 
+    let cursor = adw::SwitchRow::builder()
+        .title("Include pointer")
+        .subtitle("Draw the mouse pointer into native X11 captures")
+        .active(settings.capture.include_cursor)
+        .build();
+    let context_cursor = context.clone_handle();
+    cursor.connect_active_notify(move |row| {
+        context_cursor.update(|settings| settings.capture.include_cursor = row.is_active());
+    });
+    group.add(&cursor);
+
     page.add(&group);
     page
 }

@@ -6,6 +6,11 @@ use image::{ImageFormat, RgbaImage};
 use snipunix_core::ImageSize;
 use thiserror::Error;
 
+/// Hard ceiling for one in-memory capture. A larger image is rejected instead
+/// of letting a malformed portal response exhaust memory. 512 MiB covers 8K
+/// RGBA with generous headroom while keeping the process bounded.
+pub const MAX_IMAGE_BYTES: usize = 512 * 1024 * 1024;
+
 /// A decoded, tightly packed RGBA8 image.
 #[derive(Clone)]
 pub struct CapturedImage {
@@ -39,6 +44,9 @@ impl CapturedImage {
             .and_then(|(w, h)| w.checked_mul(h))
             .and_then(|pixels| pixels.checked_mul(4))
             .ok_or(ImageError::TooLarge)?;
+        if expected > MAX_IMAGE_BYTES {
+            return Err(ImageError::TooLarge);
+        }
         if rgba.len() != expected {
             return Err(ImageError::BufferSizeMismatch {
                 expected,

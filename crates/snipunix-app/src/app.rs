@@ -8,9 +8,10 @@ use adw::prelude::*;
 use libadwaita as adw;
 use snipunix_annotate::{ExportFormat, RenderedImage};
 use snipunix_capture::{
-    CaptureBackend, CaptureError, CaptureOptions, CapturedImage, PortalScreenshot,
+    AutoCapture, CaptureBackend, CaptureError, CaptureFrame, CaptureOptions, CapturedImage,
+    PixelMonitor,
 };
-use snipunix_core::{CaptureMapping, ImageRect, LogicalRect};
+use snipunix_core::{CaptureMapping, ImageRect, LogicalRect, MappingError, MonitorImage};
 use snipunix_overlay::{
     OverlayFrames, OverlayOptions, OverlayResult, collect_monitors, layout_from_monitors, present,
     start_countdown,
@@ -22,7 +23,7 @@ use crate::cli::{CaptureTarget, Cli};
 use crate::editor::{self, EditorView};
 use crate::onboarding;
 use crate::settings_ui;
-use crate::shortcuts::{self, ShortcutEvent};
+use crate::shortcuts::{self, BoundShortcut, ShortcutEvent};
 use crate::tray::{self, TrayCommand};
 
 pub const APP_ID: &str = "io.github.alokverma9.snipunix";
@@ -44,6 +45,7 @@ pub fn run(cli: Cli) -> glib::ExitCode {
 
     app.set_accels_for_action("app.capture-region", &["<Control><Shift>s"]);
     app.set_accels_for_action("app.capture-screen", &["<Control><Shift>a"]);
+    app.set_accels_for_action("app.capture-window", &["<Control><Shift>w"]);
     app.set_accels_for_action("app.annotate", &["<Control>e"]);
     app.set_accels_for_action("app.undo", &["<Control>z"]);
     app.set_accels_for_action("app.redo", &["<Control><Shift>z"]);
@@ -112,9 +114,12 @@ struct AppState {
     pending_output: RefCell<Option<PathBuf>>,
     exit_after: Cell<bool>,
     launch_target: Cell<Option<CaptureTarget>>,
+    pending_window: Cell<Option<u32>>,
+    backend_preference: Cell<snipunix_capture::BackendKind>,
     register_shortcuts_on_start: Cell<bool>,
     shortcut_registered: Cell<bool>,
     shortcut_stop: RefCell<Option<async_channel::Sender<()>>>,
+    x11_hotkeys: RefCell<Option<snipunix_capture::x11_hotkey::X11HotkeyService>>,
     tray: RefCell<Option<tray::TrayHandle>>,
     settings: Rc<RefCell<Settings>>,
     settings_path: PathBuf,
@@ -134,6 +139,7 @@ struct AppState {
 struct RegionContext {
     full: CapturedImage,
     logical: LogicalRect,
+    monitors: Vec<PixelMonitor>,
 }
 
 fn persist_settings(state: &AppState) {
@@ -201,6 +207,7 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     header.set_title_widget(Some(&title));
 
     let menu = gio::Menu::new();
+    menu.append(Some("Capture Window…"), Some("app.capture-window"));
     menu.append(
         Some("Register Global Shortcuts"),
         Some("app.register-shortcuts"),
@@ -352,9 +359,12 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
         pending_output: RefCell::new(cli.output),
         exit_after: Cell::new(cli.exit_after),
         launch_target: Cell::new(cli.target),
+        pending_window: Cell::new(cli.window),
+        backend_preference: Cell::new(cli.backend),
         register_shortcuts_on_start: Cell::new(cli.register_shortcuts),
         shortcut_registered: Cell::new(false),
         shortcut_stop: RefCell::new(None),
+        x11_hotkeys: RefCell::new(None),
         tray: RefCell::new(None),
         settings: Rc::new(RefCell::new(loaded)),
         settings_path,
@@ -410,6 +420,10 @@ fn install_actions(state: &Rc<AppState>) {
     add_action(app, "capture-screen", {
         let state = Rc::clone(state);
         move || start_capture(&state, CaptureTarget::Screen)
+    });
+    add_action(app, "capture-window", {
+        let state = Rc::clone(state);
+        move || start_capture(&state, CaptureTarget::Window)
     });
     add_action(app, "register-shortcuts", {
         let state = Rc::clone(state);
@@ -489,6 +503,18 @@ fn start_capture(state: &Rc<AppState>, target: CaptureTarget) {
         state.toast("A capture is already in progress.");
         return;
     }
+    if target == CaptureTarget::Window
+        && state.backend_preference.get() != snipunix_capture::BackendKind::X11
+        && !snipunix_capture::is_x11_session()
+    {
+        state.toast("Window capture needs an X11 session or the x11 backend.");
+        state.quit_if_requested();
+        return;
+    }
+    if target == CaptureTarget::Window && state.pending_window.get().is_none() {
+        show_window_picker(state);
+        return;
+    }
     let delay = state.delay.get();
     if delay == 0 {
         request_capture(state, target);
@@ -498,7 +524,8 @@ fn start_capture(state: &Rc<AppState>, target: CaptureTarget) {
     state.set_busy(true);
     state.set_status(format!("Capturing in {delay} seconds…"));
     let countdown_state = Rc::clone(state);
-    let result = start_countdown(&state.app, delay, move |completed| {
+    let reduced_motion = state.settings.borrow().appearance.reduced_motion;
+    let result = start_countdown(&state.app, delay, reduced_motion, move |completed| {
         countdown_state.set_busy(false);
         if completed {
             request_capture(&countdown_state, target);
@@ -515,13 +542,100 @@ fn start_capture(state: &Rc<AppState>, target: CaptureTarget) {
     }
 }
 
+/// X11 window picker used by **Capture Window** when no ID was supplied on the
+/// command line.
+fn show_window_picker(state: &Rc<AppState>) {
+    let backend = state.backend_preference.get();
+    if backend == snipunix_capture::BackendKind::Portal || !snipunix_capture::is_x11_session() {
+        state.toast("Window capture needs an X11 session or the x11 backend.");
+        return;
+    }
+    let windows = match snipunix_capture::X11Capture::new().list_windows() {
+        Ok(windows) => windows,
+        Err(error) => {
+            state.toast(format!("Could not list windows: {error}"));
+            return;
+        }
+    };
+    if windows.is_empty() {
+        state.toast("No capturable windows were found.");
+        return;
+    }
+
+    let dialog = adw::Window::builder()
+        .title("Capture Window")
+        .transient_for(&state.window)
+        .modal(true)
+        .default_width(620)
+        .default_height(520)
+        .build();
+    let list = gtk::ListBox::new();
+    list.set_selection_mode(gtk::SelectionMode::Single);
+    list.add_css_class("boxed-list");
+    for window in &windows {
+        let row = adw::ActionRow::new();
+        row.set_title(&glib::markup_escape_text(&window.title));
+        let id = format!("{:#x}", window.id);
+        row.set_subtitle(&format!(
+            "{} · {}×{} · {}",
+            if window.class.is_empty() {
+                "window"
+            } else {
+                &window.class
+            },
+            window.width,
+            window.height,
+            id,
+        ));
+        row.set_activatable(true);
+        list.append(&row);
+    }
+    let scrolled = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .child(&list)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .build();
+    dialog.set_content(Some(&scrolled));
+
+    let ids: Vec<u32> = windows.iter().map(|window| window.id).collect();
+    let picked = Rc::new(Cell::new(false));
+    let picker_state = Rc::clone(state);
+    let picker_dialog = dialog.clone();
+    let picker_picked = Rc::clone(&picked);
+    list.connect_row_activated(move |_list, row| {
+        let index = row.index();
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        if let Some(id) = ids.get(index) {
+            picker_picked.set(true);
+            picker_state.pending_window.set(Some(*id));
+            picker_dialog.close();
+            start_capture(&picker_state, CaptureTarget::Window);
+        }
+    });
+
+    let close_state = Rc::clone(state);
+    dialog.connect_close_request(move |_dialog| {
+        if !picked.get() {
+            close_state.set_status("Window capture cancelled.");
+            close_state.quit_if_requested();
+        }
+        glib::Propagation::Proceed
+    });
+    dialog.present();
+}
+
 fn request_capture(state: &Rc<AppState>, target: CaptureTarget) {
     if state.busy.get() || state.overlay_active.get() {
         state.toast("A capture is already in progress.");
         return;
     }
     state.set_busy(true);
-    state.set_status("Freezing the screen through the desktop portal…");
+    state.set_status("Capturing the screen…");
     // Hide the app window so it is not part of its own screenshot. The picture
     // is shown again once the capture or overlay session finishes.
     state.window.set_visible(false);
@@ -533,26 +647,32 @@ fn request_capture(state: &Rc<AppState>, target: CaptureTarget) {
         // The window is hidden at this point, so it cannot be used as a portal
         // parent (its xdg-foreign handle would be gone); the portal dialog is
         // still shown by the compositor when permission is required.
-        let backend = PortalScreenshot::default();
+        let backend = AutoCapture::new(state.backend_preference.get());
         let result = backend
             .capture(CaptureOptions {
                 interactive: false,
                 parent: None,
+                window: match target {
+                    CaptureTarget::Window => state.pending_window.get(),
+                    _ => None,
+                },
+                include_cursor: state.settings.borrow().capture.include_cursor,
             })
             .await;
         state.set_busy(false);
         match result {
-            Ok(image) => handle_capture(&state, image, target),
+            Ok(frame) => handle_capture(&state, frame, target),
             Err(error) => handle_capture_error(&state, &error),
         }
     });
 }
 
-fn handle_capture(state: &Rc<AppState>, image: CapturedImage, target: CaptureTarget) {
+fn handle_capture(state: &Rc<AppState>, frame: CaptureFrame, target: CaptureTarget) {
     state.window.present();
     close_editor(state);
     match target {
         CaptureTarget::Screen => {
+            let image = frame.image;
             state.display(&image);
             state.current.replace(Some(image.clone()));
             state.last_region.borrow_mut().take();
@@ -589,7 +709,37 @@ fn handle_capture(state: &Rc<AppState>, image: CapturedImage, target: CaptureTar
             } else {
                 None
             };
-            begin_overlay(state, image, overlay_options(state, initial));
+            begin_overlay(state, frame, overlay_options(state, initial));
+        }
+        CaptureTarget::Window => {
+            // Window captures are already cropped by the backend.
+            state.pending_window.set(None);
+            let image = frame.image;
+            state.display(&image);
+            state.current.replace(Some(image.clone()));
+            state.last_region.borrow_mut().take();
+            state.preview_bar.set_visible(true);
+            state.copy_button.set_sensitive(true);
+            state.save_button.set_sensitive(true);
+            state.annotate_button.set_sensitive(true);
+            state.adjust_button.set_sensitive(false);
+            let copied = state.settings.borrow().capture.copy_after_capture
+                && copy_to_clipboard(state, &image);
+            state.set_status(if copied {
+                format!(
+                    "Captured the window ({} × {}) and copied it to the clipboard.",
+                    image.width(),
+                    image.height()
+                )
+            } else {
+                format!(
+                    "Captured the window ({} × {}).",
+                    image.width(),
+                    image.height()
+                )
+            });
+            save_after_capture(state, &image);
+            state.quit_if_requested();
         }
     }
 }
@@ -610,6 +760,11 @@ fn handle_capture_error(state: &Rc<AppState>, error: &CaptureError) {
              backend, then try again."
                 .to_string()
         }
+        CaptureError::X11Unavailable(detail) => {
+            format!("X11 capture is unavailable: {detail}")
+        }
+        CaptureError::X11(detail) => format!("X11 capture failed: {detail}"),
+        CaptureError::Unsupported(detail) => format!("Capture is not supported: {detail}"),
         CaptureError::Timeout(duration) => {
             format!("The screenshot portal did not respond within {duration:?}.")
         }
@@ -631,7 +786,7 @@ fn handle_capture_error(state: &Rc<AppState>, error: &CaptureError) {
     state.quit_if_requested();
 }
 
-fn begin_overlay(state: &Rc<AppState>, full: CapturedImage, options: OverlayOptions) {
+fn begin_overlay(state: &Rc<AppState>, frame: CaptureFrame, options: OverlayOptions) {
     let monitors = match collect_monitors() {
         Ok(monitors) => monitors,
         Err(error) => {
@@ -648,7 +803,14 @@ fn begin_overlay(state: &Rc<AppState>, full: CapturedImage, options: OverlayOpti
             return;
         }
     };
-    let mapping = match CaptureMapping::new(layout.bounding_box(), full.size()) {
+    let pixel_monitors = frame.monitors;
+    let full = frame.image;
+    let mapping = match capture_mapping(
+        layout.bounding_box(),
+        full.size(),
+        &pixel_monitors,
+        &monitors,
+    ) {
         Ok(mapping) => mapping,
         Err(error) => {
             state.window.present();
@@ -678,7 +840,7 @@ fn begin_overlay(state: &Rc<AppState>, full: CapturedImage, options: OverlayOpti
             state_done.window.present();
             match result {
                 OverlayResult::Selected { logical, image } => {
-                    commit_region(&state_done, &full, logical, image);
+                    commit_region(&state_done, &full, &pixel_monitors, logical, image);
                 }
                 OverlayResult::Cancelled => {
                     state_done.set_status(if options.auto_commit_on_release {
@@ -697,6 +859,46 @@ fn begin_overlay(state: &Rc<AppState>, full: CapturedImage, options: OverlayOpti
         state.window.present();
         state.toast(format!("Could not open the selection overlay: {error}"));
     }
+}
+
+/// Builds the coordinate mapping. Exact per-monitor pixel rectangles from the
+/// backend are matched to GDK monitors by connector name (falling back to
+/// list order); without them the mapping is uniform.
+fn capture_mapping(
+    desktop: LogicalRect,
+    image: snipunix_core::ImageSize,
+    pixel_monitors: &[PixelMonitor],
+    monitors: &[snipunix_overlay::OverlayMonitor],
+) -> Result<CaptureMapping, MappingError> {
+    if !pixel_monitors.is_empty() && pixel_monitors.len() == monitors.len() {
+        let mut per_monitor = Vec::with_capacity(monitors.len());
+        for overlay in monitors {
+            let matched = pixel_monitors
+                .iter()
+                .find(|pixel| pixel.name.as_deref() == Some(overlay.geometry.name.as_str()))
+                .or_else(|| pixel_monitors.get(overlay.geometry.id as usize));
+            let Some(pixel) = matched else {
+                per_monitor.clear();
+                break;
+            };
+            per_monitor.push(MonitorImage {
+                id: overlay.geometry.id,
+                logical: overlay.geometry.rect(),
+                image: pixel.rect,
+            });
+        }
+        if per_monitor.len() == monitors.len() {
+            if let Ok(mapping) = CaptureMapping::with_monitors(desktop, image, per_monitor) {
+                tracing::debug!(
+                    monitors = monitors.len(),
+                    "using exact per-monitor capture mapping"
+                );
+                return Ok(mapping);
+            }
+            tracing::warn!("per-monitor rectangles were invalid; using a uniform mapping");
+        }
+    }
+    CaptureMapping::new(desktop, image)
 }
 
 fn overlay_frames(
@@ -722,6 +924,7 @@ fn overlay_frames(
 fn commit_region(
     state: &Rc<AppState>,
     full: &CapturedImage,
+    monitors: &[PixelMonitor],
     logical: LogicalRect,
     image: ImageRect,
 ) {
@@ -740,6 +943,7 @@ fn commit_region(
             state.last_region.replace(Some(RegionContext {
                 full: full.clone(),
                 logical,
+                monitors: monitors.to_vec(),
             }));
             state.preview_bar.set_visible(true);
             state.copy_button.set_sensitive(true);
@@ -989,7 +1193,10 @@ fn adjust_region(state: &Rc<AppState>) {
     let options = overlay_options(state, Some(context.logical));
     begin_overlay(
         state,
-        context.full,
+        CaptureFrame {
+            image: context.full,
+            monitors: context.monitors,
+        },
         OverlayOptions {
             auto_commit_on_release: false,
             ..options
@@ -1116,6 +1323,7 @@ fn register_shortcuts(state: &Rc<AppState>) {
         let _ = stop.send_blocking(());
         state.shortcut_registered.set(false);
     }
+    state.x11_hotkeys.borrow_mut().take();
     if state.shortcut_registered.get() {
         state.toast("Global shortcuts are already registered.");
         return;
@@ -1140,6 +1348,7 @@ fn register_shortcuts(state: &Rc<AppState>) {
     });
 
     let window = state.window.clone();
+    let fallback_state = Rc::clone(state);
     glib::spawn_future_local(async move {
         let parent = if window.is_realized() {
             ashpd::WindowIdentifier::from_native(&window).await
@@ -1148,7 +1357,7 @@ fn register_shortcuts(state: &Rc<AppState>) {
         };
         let error_sender = sender.clone();
         if let Err(error) = shortcuts::run(
-            sender,
+            sender.clone(),
             parent,
             &region_trigger,
             &screen_trigger,
@@ -1158,9 +1367,59 @@ fn register_shortcuts(state: &Rc<AppState>) {
         {
             let message = shortcuts::describe_error(&error);
             tracing::warn!(%error, "global shortcut registration failed");
+            if snipunix_capture::is_x11_session()
+                && start_x11_shortcuts(&fallback_state, &sender, &region_trigger, &screen_trigger)
+            {
+                tracing::info!("using the X11 key-grab fallback for global shortcuts");
+                return;
+            }
             let _ = error_sender.send(ShortcutEvent::Failed(message)).await;
         }
     });
+}
+
+/// Grabs the configured triggers directly with X11 when the portal is
+/// unavailable. Returns `true` when the grabs were installed.
+fn start_x11_shortcuts(
+    state: &Rc<AppState>,
+    sender: &async_channel::Sender<ShortcutEvent>,
+    region_trigger: &str,
+    screen_trigger: &str,
+) -> bool {
+    let triggers = vec![region_trigger.to_string(), screen_trigger.to_string()];
+    let hotkey_sender = sender.clone();
+    let spawned = snipunix_capture::x11_hotkey::spawn(&triggers, move |index| {
+        let id = if index == 0 {
+            shortcuts::REGION_SHORTCUT_ID
+        } else {
+            shortcuts::SCREEN_SHORTCUT_ID
+        };
+        let _ = hotkey_sender.send_blocking(ShortcutEvent::Activated(id.to_string()));
+    });
+    match spawned {
+        Ok(service) => {
+            state.x11_hotkeys.replace(Some(service));
+            state.shortcut_registered.set(true);
+            let bound = vec![
+                BoundShortcut {
+                    id: shortcuts::REGION_SHORTCUT_ID.to_string(),
+                    description: "Capture a screen region".to_string(),
+                    trigger: region_trigger.to_string(),
+                },
+                BoundShortcut {
+                    id: shortcuts::SCREEN_SHORTCUT_ID.to_string(),
+                    description: "Capture the full screen".to_string(),
+                    trigger: screen_trigger.to_string(),
+                },
+            ];
+            let _ = sender.send_blocking(ShortcutEvent::Registered(bound));
+            true
+        }
+        Err(error) => {
+            tracing::warn!(%error, "X11 key-grab fallback failed");
+            false
+        }
+    }
 }
 
 fn setup_tray(state: &Rc<AppState>) {

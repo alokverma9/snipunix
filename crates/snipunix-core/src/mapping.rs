@@ -41,19 +41,35 @@ impl ImageRect {
     }
 }
 
+/// Pixel rectangle occupied by one monitor in the captured image.
+///
+/// Backends that can report exact monitor geometry (X11 through RandR) fill
+/// these in. Backends that only return a composited desktop image (the
+/// Screenshot portal) leave the list empty and the mapping falls back to one
+/// uniform scale.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MonitorImage {
+    /// Stable monitor identifier; matches [`crate::Monitor::id`] when known.
+    pub id: u32,
+    /// Monitor rectangle in virtual-desktop logical coordinates.
+    pub logical: LogicalRect,
+    /// Monitor rectangle in captured-image pixels.
+    pub image: ImageRect,
+}
+
 /// Bidirectional scale between the logical desktop bounding box and the
 /// captured image.
 ///
-/// The portal does not report the geometry of the captured desktop. M0 derives
-/// one uniform scale per axis from the image size and the GDK monitor layout.
-/// Mixed-DPI desktops where monitors have different effective scales are a
-/// documented limitation of this milestone.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// A mapping is either *uniform* (one scale per axis, used when the backend
+/// cannot report per-monitor geometry) or *per-monitor* (each monitor has its
+/// own image rectangle, which keeps mixed-DPI crops pixel-exact).
+#[derive(Debug, Clone, PartialEq)]
 pub struct CaptureMapping {
     desktop: LogicalRect,
     image: ImageSize,
     scale_x: f64,
     scale_y: f64,
+    monitors: Vec<MonitorImage>,
 }
 
 impl CaptureMapping {
@@ -69,7 +85,54 @@ impl CaptureMapping {
             image,
             scale_x: f64::from(image.width) / desktop.width,
             scale_y: f64::from(image.height) / desktop.height,
+            monitors: Vec::new(),
         })
+    }
+
+    /// Builds a per-monitor mapping from exact monitor rectangles.
+    ///
+    /// This is what makes mixed-DPI crops exact: each monitor keeps its own
+    /// scale derived from its logical and pixel rectangles. Every monitor
+    /// rectangle must be non-empty and inside the captured image.
+    pub fn with_monitors(
+        desktop: LogicalRect,
+        image: ImageSize,
+        monitors: Vec<MonitorImage>,
+    ) -> Result<Self, MappingError> {
+        let mut mapping = Self::new(desktop, image)?;
+        for monitor in &monitors {
+            if monitor.logical.is_empty() {
+                return Err(MappingError::EmptyMonitor { id: monitor.id });
+            }
+            if monitor.image.width == 0 || monitor.image.height == 0 {
+                return Err(MappingError::EmptyMonitor { id: monitor.id });
+            }
+            if monitor.image.x.saturating_add(monitor.image.width) > image.width
+                || monitor.image.y.saturating_add(monitor.image.height) > image.height
+            {
+                return Err(MappingError::MonitorOutsideImage {
+                    id: monitor.id,
+                    x: monitor.image.x,
+                    y: monitor.image.y,
+                    width: monitor.image.width,
+                    height: monitor.image.height,
+                });
+            }
+        }
+        mapping.monitors = monitors;
+        Ok(mapping)
+    }
+
+    /// `true` when the mapping has exact per-monitor rectangles.
+    #[must_use]
+    pub fn is_per_monitor(&self) -> bool {
+        !self.monitors.is_empty()
+    }
+
+    /// Exact per-monitor rectangles, or an empty slice for a uniform mapping.
+    #[must_use]
+    pub fn monitor_images(&self) -> &[MonitorImage] {
+        &self.monitors
     }
 
     #[must_use]
@@ -99,11 +162,47 @@ impl CaptureMapping {
     #[must_use]
     pub fn virtual_to_image(&self, selection: LogicalRect) -> Option<ImageRect> {
         let selection = selection.intersection(self.desktop)?;
+        if self.monitors.is_empty() {
+            return self.uniform_to_image(selection);
+        }
+
+        // Per-monitor mapping: split the selection at monitor edges and map
+        // each piece with that monitor's own scale. The result is the bounding
+        // box of the mapped pieces, which is exact for a selection inside one
+        // monitor and conservative for a selection spanning monitors.
+        let mut left = f64::INFINITY;
+        let mut top = f64::INFINITY;
+        let mut right = f64::NEG_INFINITY;
+        let mut bottom = f64::NEG_INFINITY;
+        for monitor in &self.monitors {
+            let Some(part) = selection.intersection(monitor.logical) else {
+                continue;
+            };
+            let scale_x = f64::from(monitor.image.width) / monitor.logical.width;
+            let scale_y = f64::from(monitor.image.height) / monitor.logical.height;
+            let piece_left = f64::from(monitor.image.x) + (part.x - monitor.logical.x) * scale_x;
+            let piece_top = f64::from(monitor.image.y) + (part.y - monitor.logical.y) * scale_y;
+            let piece_right =
+                f64::from(monitor.image.x) + (part.right() - monitor.logical.x) * scale_x;
+            let piece_bottom =
+                f64::from(monitor.image.y) + (part.bottom() - monitor.logical.y) * scale_y;
+            left = left.min(piece_left.floor());
+            top = top.min(piece_top.floor());
+            right = right.max(piece_right.ceil());
+            bottom = bottom.max(piece_bottom.ceil());
+        }
+        self.clamp_image_rect(left, top, right, bottom)
+    }
+
+    fn uniform_to_image(&self, selection: LogicalRect) -> Option<ImageRect> {
         let left = ((selection.x - self.desktop.x) * self.scale_x).floor();
         let top = ((selection.y - self.desktop.y) * self.scale_y).floor();
         let right = ((selection.right() - self.desktop.x) * self.scale_x).ceil();
         let bottom = ((selection.bottom() - self.desktop.y) * self.scale_y).ceil();
+        self.clamp_image_rect(left, top, right, bottom)
+    }
 
+    fn clamp_image_rect(&self, left: f64, top: f64, right: f64, bottom: f64) -> Option<ImageRect> {
         let left = left.clamp(0.0, f64::from(self.image.width)) as u32;
         let top = top.clamp(0.0, f64::from(self.image.height)) as u32;
         let right = right.clamp(0.0, f64::from(self.image.width)) as u32;
@@ -120,7 +219,11 @@ impl CaptureMapping {
     /// Image pixels occupied by one monitor.
     #[must_use]
     pub fn image_rect_for_monitor(&self, monitor: &Monitor) -> Option<ImageRect> {
-        self.virtual_to_image(monitor.rect())
+        self.monitors
+            .iter()
+            .find(|mapping| mapping.id == monitor.id)
+            .map(|mapping| mapping.image)
+            .or_else(|| self.virtual_to_image(monitor.rect()))
     }
 
     /// Scale needed to draw image pixels as logical pixels on screen.
@@ -136,6 +239,16 @@ pub enum MappingError {
     EmptyDesktop,
     #[error("captured image has a zero dimension")]
     EmptyImage,
+    #[error("monitor {id} has an empty logical or pixel rectangle")]
+    EmptyMonitor { id: u32 },
+    #[error("monitor {id} image rectangle {x},{y} {width}x{height} is outside the captured image")]
+    MonitorOutsideImage {
+        id: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    },
 }
 
 #[cfg(test)]
@@ -199,6 +312,93 @@ mod tests {
             mapping.image_rect_for_monitor(&monitor),
             Some(ImageRect::new(0, 0, 1280, 1024))
         );
+    }
+
+    #[test]
+    fn per_monitor_mapping_is_exact_inside_each_monitor() {
+        // Left monitor: 960x540 at 2x -> 1920x1080 pixels.
+        // Right monitor: 1280x720 at 1x -> 1280x720 pixels, placed to the right.
+        let mapping = CaptureMapping::with_monitors(
+            LogicalRect::new(0.0, 0.0, 2240.0, 1080.0),
+            ImageSize::new(3200, 1080),
+            vec![
+                MonitorImage {
+                    id: 0,
+                    logical: LogicalRect::new(0.0, 0.0, 960.0, 540.0),
+                    image: ImageRect::new(0, 0, 1920, 1080),
+                },
+                MonitorImage {
+                    id: 1,
+                    logical: LogicalRect::new(960.0, 0.0, 1280.0, 720.0),
+                    image: ImageRect::new(1920, 0, 1280, 720),
+                },
+            ],
+        )
+        .unwrap();
+
+        assert!(mapping.is_per_monitor());
+        // Logical (10,10)-(20,20) on the 2x monitor becomes (20,20)-(40,40).
+        assert_eq!(
+            mapping.virtual_to_image(LogicalRect::new(10.0, 10.0, 10.0, 10.0)),
+            Some(ImageRect::new(20, 20, 20, 20))
+        );
+        // Logical (970,10)-(980,20) on the 1x monitor becomes (1930,10)-(1940,20).
+        assert_eq!(
+            mapping.virtual_to_image(LogicalRect::new(970.0, 10.0, 10.0, 10.0)),
+            Some(ImageRect::new(1930, 10, 10, 10))
+        );
+    }
+
+    #[test]
+    fn per_monitor_mapping_clamps_and_rejects_outside_monitors() {
+        let mapping = CaptureMapping::with_monitors(
+            LogicalRect::new(0.0, 0.0, 1920.0, 1080.0),
+            ImageSize::new(1920, 1080),
+            vec![MonitorImage {
+                id: 0,
+                logical: LogicalRect::new(0.0, 0.0, 1920.0, 1080.0),
+                image: ImageRect::new(0, 0, 1920, 1080),
+            }],
+        )
+        .unwrap();
+        // A triangle outside the only monitor maps to nothing.
+        assert_eq!(
+            mapping.virtual_to_image(LogicalRect::new(2000.0, 2000.0, 10.0, 10.0)),
+            None
+        );
+        // Selections crossing the edge are clamped to the image.
+        assert_eq!(
+            mapping.virtual_to_image(LogicalRect::new(1900.0, 1000.0, 500.0, 500.0)),
+            Some(ImageRect::new(1900, 1000, 20, 80))
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_monitor_rectangles() {
+        assert!(matches!(
+            CaptureMapping::with_monitors(
+                LogicalRect::new(0.0, 0.0, 100.0, 100.0),
+                ImageSize::new(100, 100),
+                vec![MonitorImage {
+                    id: 3,
+                    logical: LogicalRect::new(0.0, 0.0, 100.0, 100.0),
+                    image: ImageRect::new(0, 0, 0, 100),
+                }],
+            ),
+            Err(MappingError::EmptyMonitor { id: 3 })
+        ));
+        assert!(matches!(
+            CaptureMapping::with_monitors(
+                LogicalRect::new(0.0, 0.0, 100.0, 100.0),
+                ImageSize::new(100, 100),
+                vec![MonitorImage {
+                    id: 4,
+                    logical: LogicalRect::new(0.0, 0.0, 100.0, 100.0),
+                    image: ImageRect::new(50, 0, 100, 100),
+                }],
+            ),
+            Err(MappingError::MonitorOutsideImage { id: 4, .. })
+        ));
     }
 
     #[test]

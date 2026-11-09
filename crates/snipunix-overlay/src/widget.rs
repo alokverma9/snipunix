@@ -162,6 +162,16 @@ impl SelectionWidget {
         let widget: Self = glib::Object::new();
         widget.imp().state.replace(Some(Rc::clone(state)));
         widget.imp().index.set(index);
+        widget.update_property(&[
+            gtk::accessible::Property::Label("Snipunix region selection"),
+            gtk::accessible::Property::Description(
+                "Drag to select a region. Arrow keys move the selection, Shift plus an arrow \
+                 moves ten pixels, Enter or Control+C confirms, and Escape cancels.",
+            ),
+            gtk::accessible::Property::KeyShortcuts(
+                "Escape Return Control+C Left Right Up Down Shift+Left Shift+Right Shift+Up Shift+Down",
+            ),
+        ]);
         widget
     }
 }
@@ -317,7 +327,8 @@ fn draw_badge(
     };
     let text = format!("{} × {}", image.width, image.height);
     let layout = widget.create_pango_layout(Some(&text));
-    layout.set_font_description(Some(&pango::FontDescription::from_string("Monospace 11")));
+    // No explicit size: follow the user's text-scaling preference.
+    layout.set_font_description(Some(&pango::FontDescription::from_string("Monospace")));
     let (text_width, text_height) = layout.pixel_size();
 
     let badge_width = f64::from(text_width) + 16.0;
@@ -402,7 +413,7 @@ fn draw_pill(
     y: f32,
 ) {
     let layout = widget.create_pango_layout(Some(text));
-    layout.set_font_description(Some(&pango::FontDescription::from_string("Sans 11")));
+    layout.set_font_description(Some(&pango::FontDescription::from_string("Sans")));
     let (text_width, text_height) = layout.pixel_size();
     let width = text_width as f32 + 20.0;
     let height = text_height as f32 + 10.0;

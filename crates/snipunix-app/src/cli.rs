@@ -5,10 +5,13 @@
 
 use std::path::PathBuf;
 
+use snipunix_capture::BackendKind;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CaptureTarget {
     Screen,
     Region,
+    Window,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -28,6 +31,16 @@ pub struct Cli {
     pub remove_line_breaks: bool,
     /// Explicitly download the pinned OCR models and exit.
     pub download_ocr_models: bool,
+    /// Capture backend preference.
+    pub backend: BackendKind,
+    /// X11 window ID for `--capture window`.
+    pub window: Option<u32>,
+    /// Draw the pointer into the capture (X11).
+    pub include_cursor: bool,
+    /// List capturable X11 windows and exit.
+    pub list_windows: bool,
+    /// Print a telemetry-free diagnostics report and exit.
+    pub diagnostics: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -35,6 +48,19 @@ pub enum ParseResult {
     Run(Cli),
     Help,
     Version,
+}
+
+fn parse_window_id(value: &str) -> Result<u32, String> {
+    let trimmed = value.trim();
+    let parsed = if let Some(hex) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        u32::from_str_radix(hex, 16)
+    } else {
+        trimmed.parse::<u32>()
+    };
+    parsed.map_err(|_| format!("invalid window ID '{value}'; expected decimal or 0x-prefixed hex"))
 }
 
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<ParseResult, String> {
@@ -50,6 +76,23 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<ParseResult, Stri
             "--portal-info" => cli.portal_info = true,
             "--remove-line-breaks" => cli.remove_line_breaks = true,
             "--download-ocr-models" => cli.download_ocr_models = true,
+            "--include-cursor" => cli.include_cursor = true,
+            "--list-windows" => cli.list_windows = true,
+            "--diagnostics" => cli.diagnostics = true,
+            "--backend" => {
+                let value = args.next().ok_or_else(|| {
+                    "--backend requires a value: auto, portal, or x11".to_string()
+                })?;
+                cli.backend = BackendKind::parse(&value).ok_or_else(|| {
+                    format!("unknown backend '{value}'; expected auto, portal, or x11")
+                })?;
+            }
+            "--window" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--window requires an X11 window ID".to_string())?;
+                cli.window = Some(parse_window_id(&value)?);
+            }
             "--ocr" => {
                 let value = args
                     .next()
@@ -83,9 +126,10 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<ParseResult, Stri
                 cli.target = Some(match value.as_str() {
                     "screen" | "full" | "monitor" => CaptureTarget::Screen,
                     "region" | "area" => CaptureTarget::Region,
+                    "window" => CaptureTarget::Window,
                     other => {
                         return Err(format!(
-                            "unknown capture target '{other}'; expected screen or region"
+                            "unknown capture target '{other}'; expected screen, region, or window"
                         ));
                     }
                 });
@@ -110,9 +154,14 @@ USAGE:
     snipunix [OPTIONS]
 
 OPTIONS:
-    --capture <screen|region>   Capture immediately after startup.
+    --capture <screen|region|window>  Capture immediately after startup.
     -o, --output <PATH>         Write the resulting PNG to PATH.
     --delay <SECONDS>           Wait 0–10 seconds before capturing (default 0).
+    --backend <auto|portal|x11> Capture backend preference (default auto).
+    --window <ID>               X11 window ID for `--capture window`.
+    --list-windows              List capturable X11 windows and exit.
+    --diagnostics               Print a telemetry-free diagnostics report.
+    --include-cursor            Draw the pointer into the capture (X11).
     --exit                      Quit after the capture completes.
     --register-shortcuts        Register global shortcuts through the portal.
     --portal-info               Print Screenshot portal capabilities and exit.
@@ -128,6 +177,8 @@ EXAMPLES:
     snipunix --capture screen --output /tmp/snipunix-screen.png
     snipunix --capture region --output /tmp/snipunix-region.png
     snipunix --capture region --delay 5
+    snipunix --list-windows
+    snipunix --capture window --window 0x400001 --output /tmp/window.png
 ";
 
 #[cfg(test)]
@@ -164,7 +215,35 @@ mod tests {
         assert!(parse_args(&["--capture"]).is_err());
         assert!(parse_args(&["--output"]).is_err());
         assert!(parse_args(&["--nope"]).is_err());
-        assert!(parse_args(&["--capture", "window"]).is_err());
+        assert!(parse_args(&["--capture", "desktop"]).is_err());
+    }
+
+    #[test]
+    fn parses_window_and_backend_options() {
+        let ParseResult::Run(cli) = parse_args(&[
+            "--capture",
+            "window",
+            "--window",
+            "0x4a00007",
+            "--backend",
+            "x11",
+            "--include-cursor",
+        ])
+        .unwrap() else {
+            panic!("expected run");
+        };
+        assert_eq!(cli.target, Some(CaptureTarget::Window));
+        assert_eq!(cli.window, Some(0x4a0_0007));
+        assert_eq!(cli.backend, BackendKind::X11);
+        assert!(cli.include_cursor);
+
+        let ParseResult::Run(cli) = parse_args(&["--window", "1234"]).unwrap() else {
+            panic!("expected run");
+        };
+        assert_eq!(cli.window, Some(1234));
+        assert!(parse_args(&["--backend", "mir"]).is_err());
+        assert!(parse_args(&["--window"]).is_err());
+        assert!(parse_args(&["--window", "nope"]).is_err());
     }
 
     #[test]

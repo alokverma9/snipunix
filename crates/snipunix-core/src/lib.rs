@@ -16,7 +16,7 @@ pub mod selection;
 pub use crop::{CropError, crop_rgba};
 pub use geometry::{LogicalPoint, LogicalRect, LogicalSize};
 pub use layout::{DesktopLayout, LayoutError, Monitor};
-pub use mapping::{CaptureMapping, ImageRect, ImageSize, MappingError};
+pub use mapping::{CaptureMapping, ImageRect, ImageSize, MappingError, MonitorImage};
 pub use selection::{
     HANDLE_HIT_SLOP, HANDLE_SIZE, Handle, MIN_SELECTION_SIZE, PressTarget, ReleaseOutcome,
     Selection, SelectionPhase,
