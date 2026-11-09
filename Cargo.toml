@@ -3,12 +3,13 @@ resolver = "3"
 members = [
     "crates/snipunix-core",
     "crates/snipunix-capture",
+    "crates/snipunix-annotate",
     "crates/snipunix-overlay",
     "crates/snipunix-app",
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-or-later"
@@ -18,6 +19,7 @@ repository = "https://github.com/alokverma9/snipunix"
 [workspace.dependencies]
 snipunix-core = { path = "crates/snipunix-core" }
 snipunix-capture = { path = "crates/snipunix-capture" }
+snipunix-annotate = { path = "crates/snipunix-annotate" }
 snipunix-overlay = { path = "crates/snipunix-overlay" }
 
 gtk = { package = "gtk4", version = "0.11.5", features = ["v4_12"] }
@@ -31,7 +33,17 @@ ashpd = { version = "0.14.0", default-features = false, features = [
     "screenshot",
     "global_shortcuts",
 ] }
-image = { version = "0.25.10", default-features = false, features = ["png"] }
+image = { version = "0.25.10", default-features = false, features = [
+    "png",
+    "jpeg",
+    "webp",
+] }
+tiny-skia = { version = "0.12.0", default-features = false, features = ["std"] }
+cosmic-text = { version = "0.19.0", default-features = false, features = [
+    "std",
+    "swash",
+    "fontconfig",
+] }
 thiserror = "2"
 anyhow = "1"
 tracing = "0.1"

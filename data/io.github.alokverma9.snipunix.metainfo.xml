@@ -11,11 +11,16 @@
       you choose a region from a frozen image, and copies it to the clipboard.
       You can copy, save as PNG, or reopen the frozen overlay to adjust the
       region. A delay of up to ten seconds is available before the capture.
-      Annotation and sharing arrive in later milestones.
     </p>
     <p>
-      Images stay in memory until you save them. Snipunix does not upload
-      anything and contains no telemetry.
+      The annotation editor adds pen, highlighter, line, arrow, rectangle,
+      ellipse, text, eraser, and crop tools with undo and redo, plus selection,
+      move, and resize. Copy the annotated result to the clipboard or export it
+      as PNG, JPEG, or WebP from a native save dialog.
+    </p>
+    <p>
+      Images stay in memory until you save them. Snipunix works locally, does
+      not upload anything, and contains no telemetry.
     </p>
   </description>
   <launchable type="desktop-id">io.github.alokverma9.snipunix.desktop</launchable>
@@ -32,6 +37,16 @@
   </developer>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.0" date="2026-11-09">
+      <description>
+        <p>
+          M2: non-destructive annotation editor with pen, highlighter, line,
+          arrow, rectangle, ellipse, UTF-8 text, eraser, crop, selection move
+          and resize, undo and redo, shared screen/export rendering, Copy
+          Annotated, and PNG/JPEG/WebP export.
+        </p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-11-08">
       <description>
         <p>

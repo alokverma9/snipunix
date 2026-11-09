@@ -16,6 +16,7 @@ use snipunix_overlay::{
 };
 
 use crate::cli::{CaptureTarget, Cli};
+use crate::editor::{self, EditorView};
 use crate::shortcuts::{self, ShortcutEvent};
 
 pub const APP_ID: &str = "io.github.alokverma9.snipunix";
@@ -37,6 +38,9 @@ pub fn run(cli: Cli) -> glib::ExitCode {
 
     app.set_accels_for_action("app.capture-region", &["<Control><Shift>s"]);
     app.set_accels_for_action("app.capture-screen", &["<Control><Shift>a"]);
+    app.set_accels_for_action("app.annotate", &["<Control>e"]);
+    app.set_accels_for_action("app.undo", &["<Control>z"]);
+    app.set_accels_for_action("app.redo", &["<Control><Shift>z"]);
     app.set_accels_for_action("app.copy", &["<Control>c"]);
     app.set_accels_for_action("app.save-as", &["<Control>s"]);
     app.set_accels_for_action("app.quit", &["<Control>q"]);
@@ -88,7 +92,9 @@ struct AppState {
     preview_bar: gtk::Box,
     copy_button: gtk::Button,
     save_button: gtk::Button,
+    annotate_button: gtk::Button,
     adjust_button: gtk::Button,
+    editor: RefCell<Option<Rc<EditorView>>>,
 }
 
 #[derive(Clone)]
@@ -202,6 +208,11 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     let adjust_button = gtk::Button::with_label("Adjust Region");
     adjust_button.set_action_name(Some("app.adjust"));
     adjust_button.set_sensitive(false);
+    let annotate_button = gtk::Button::with_label("Annotate");
+    annotate_button.add_css_class("suggested-action");
+    annotate_button.set_action_name(Some("app.annotate"));
+    annotate_button.set_tooltip_text(Some("Open the annotation editor for the latest capture"));
+    annotate_button.set_sensitive(false);
     copy_button.set_sensitive(false);
     save_button.set_sensitive(false);
     adjust_button.set_tooltip_text(Some(
@@ -209,6 +220,7 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     ));
     preview_bar.append(&copy_button);
     preview_bar.append(&save_button);
+    preview_bar.append(&annotate_button);
     preview_bar.append(&adjust_button);
     preview_bar.set_visible(false);
 
@@ -294,7 +306,9 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
         preview_bar,
         copy_button,
         save_button,
+        annotate_button,
         adjust_button,
+        editor: RefCell::new(None),
     });
 
     let delay_state = Rc::downgrade(&state);
@@ -358,6 +372,26 @@ fn install_actions(state: &Rc<AppState>) {
     add_action(app, "adjust", {
         let state = Rc::clone(state);
         move || adjust_region(&state)
+    });
+    add_action(app, "annotate", {
+        let state = Rc::clone(state);
+        move || open_editor(&state)
+    });
+    add_action(app, "undo", {
+        let state = Rc::clone(state);
+        move || {
+            if let Some(editor) = state.editor.borrow().as_ref().cloned() {
+                editor.undo();
+            }
+        }
+    });
+    add_action(app, "redo", {
+        let state = Rc::clone(state);
+        move || {
+            if let Some(editor) = state.editor.borrow().as_ref().cloned() {
+                editor.redo();
+            }
+        }
     });
     add_action(app, "quit", {
         let app = app.clone();
@@ -440,6 +474,7 @@ fn request_capture(state: &Rc<AppState>, target: CaptureTarget) {
 
 fn handle_capture(state: &Rc<AppState>, image: CapturedImage, target: CaptureTarget) {
     state.window.present();
+    close_editor(state);
     match target {
         CaptureTarget::Screen => {
             state.display(&image);
@@ -448,6 +483,7 @@ fn handle_capture(state: &Rc<AppState>, image: CapturedImage, target: CaptureTar
             state.preview_bar.set_visible(true);
             state.copy_button.set_sensitive(true);
             state.save_button.set_sensitive(true);
+            state.annotate_button.set_sensitive(true);
             state.adjust_button.set_sensitive(false);
             let copied = copy_to_clipboard(state, &image);
             state.set_status(if copied {
@@ -606,6 +642,7 @@ fn commit_region(
                 "cropped selected region"
             );
             state.window.present();
+            close_editor(state);
             state.display(&cropped);
             state.current.replace(Some(cropped.clone()));
             state.last_region.replace(Some(RegionContext {
@@ -615,6 +652,7 @@ fn commit_region(
             state.preview_bar.set_visible(true);
             state.copy_button.set_sensitive(true);
             state.save_button.set_sensitive(true);
+            state.annotate_button.set_sensitive(true);
             state.adjust_button.set_sensitive(true);
             let copied = copy_to_clipboard(state, &cropped);
             state.set_status(if copied {
@@ -655,7 +693,79 @@ fn copy_to_clipboard(state: &AppState, image: &CapturedImage) -> bool {
     true
 }
 
+fn open_editor(state: &Rc<AppState>) {
+    if state.editor.borrow().is_some() {
+        state.stack.set_visible_child_name("editor");
+        return;
+    }
+    let Some(image) = state.current.borrow().clone() else {
+        state.toast("Capture a screen or region before annotating.");
+        return;
+    };
+
+    let status_weak = Rc::downgrade(state);
+    let toast_weak = Rc::downgrade(state);
+    let close_weak = Rc::downgrade(state);
+    let copied_weak = Rc::downgrade(state);
+    let callbacks = editor::Callbacks {
+        status: Rc::new(move |message: &str| {
+            if let Some(state) = status_weak.upgrade() {
+                state.set_status(message);
+            }
+        }),
+        toast: Rc::new(move |message: &str| {
+            if let Some(state) = toast_weak.upgrade() {
+                state.toast(message);
+            }
+        }),
+        close: Rc::new(move || {
+            if let Some(state) = close_weak.upgrade() {
+                close_editor(&state);
+            }
+        }),
+        copied: Rc::new(move || {
+            if let Some(state) = copied_weak.upgrade() {
+                state.clipboard_owned.set(true);
+            }
+        }),
+    };
+
+    let parent: gtk::Window = state.window.clone().upcast();
+    match EditorView::new(image, parent, callbacks) {
+        Ok(view) => {
+            let view = Rc::new(view);
+            state.stack.add_named(&view.root, Some("editor"));
+            state.stack.set_visible_child_name("editor");
+            state.preview_bar.set_visible(false);
+            state.editor.replace(Some(view));
+            state.set_status(
+                "Annotation editor ready. Scroll to zoom, middle-drag to pan, Ctrl+Z to undo.",
+            );
+        }
+        Err(error) => {
+            state.toast(format!("Could not open the annotation editor: {error}"));
+        }
+    }
+}
+
+fn close_editor(state: &AppState) {
+    let Some(view) = state.editor.borrow_mut().take() else {
+        return;
+    };
+    state.stack.remove(&view.root);
+    if state.current.borrow().is_some() {
+        state.stack.set_visible_child_name("image");
+        state.preview_bar.set_visible(true);
+    } else {
+        state.stack.set_visible_child_name("empty");
+    }
+}
+
 fn copy_current(state: &Rc<AppState>) {
+    if let Some(editor) = state.editor.borrow().as_ref().cloned() {
+        editor.copy_annotated();
+        return;
+    }
     let Some(image) = state.current.borrow().clone() else {
         state.toast("There is no captured image to copy yet.");
         return;
@@ -670,6 +780,10 @@ fn copy_current(state: &Rc<AppState>) {
 }
 
 fn save_as(state: &Rc<AppState>) {
+    if let Some(editor) = state.editor.borrow().as_ref().cloned() {
+        editor.open_export_dialog();
+        return;
+    }
     let Some(image) = state.current.borrow().clone() else {
         state.toast("There is no captured image to save yet.");
         return;

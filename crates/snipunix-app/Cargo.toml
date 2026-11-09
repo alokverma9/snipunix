@@ -15,6 +15,7 @@ path = "src/main.rs"
 snipunix-core.workspace = true
 snipunix-capture.workspace = true
 snipunix-overlay.workspace = true
+snipunix-annotate.workspace = true
 gtk.workspace = true
 gdk.workspace = true
 glib.workspace = true

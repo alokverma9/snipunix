@@ -2,6 +2,7 @@
 
 mod app;
 mod cli;
+mod editor;
 mod shortcuts;
 
 use std::process::ExitCode;
