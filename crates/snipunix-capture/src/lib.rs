@@ -63,7 +63,11 @@ impl CaptureFrame {
 
     #[must_use]
     pub fn monitor_images(&self) -> Vec<snipunix_core::MonitorImage> {
-        self.monitors.iter().map(PixelMonitor::image_rect).collect()
+        self.monitors
+            .iter()
+            .enumerate()
+            .map(|(id, monitor)| monitor.image_rect_with_id(id as u32))
+            .collect()
     }
 }
 
@@ -149,6 +153,9 @@ impl CaptureBackend for AutoCapture {
     fn capture(&self, options: CaptureOptions) -> CaptureFuture<'_> {
         Box::pin(async move {
             let first = match self.preference {
+                // Window IDs only exist in the X11 backend, so auto selection
+                // must not waste a portal request that is guaranteed to fail.
+                BackendKind::Auto if options.window.is_some() => BackendKind::X11,
                 BackendKind::Auto => detected_backend(),
                 other => other,
             };
@@ -166,7 +173,7 @@ impl CaptureBackend for AutoCapture {
                 include_cursor: options.include_cursor,
             };
             let primary = match first {
-                BackendKind::X11 => X11Capture::default().capture(options).await,
+                BackendKind::X11 => X11Capture::new().capture(options).await,
                 _ => PortalScreenshot::default().capture(options).await,
             };
             match primary {
@@ -174,7 +181,7 @@ impl CaptureBackend for AutoCapture {
                 Err(error) if should_fall_back(&error) => {
                     tracing::warn!(%error, fallback = second.label(), "capture backend failed; trying fallback");
                     match second {
-                        BackendKind::X11 => X11Capture::default().capture(fallback_options).await,
+                        BackendKind::X11 => X11Capture::new().capture(fallback_options).await,
                         _ => PortalScreenshot::default().capture(fallback_options).await,
                     }
                 }
@@ -191,5 +198,6 @@ fn should_fall_back(error: &CaptureError) -> bool {
             | CaptureError::X11Unavailable(_)
             | CaptureError::X11(_)
             | CaptureError::Timeout(_)
+            | CaptureError::Unsupported(_)
     )
 }

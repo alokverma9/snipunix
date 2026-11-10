@@ -62,7 +62,8 @@ pub struct MonitorImage {
 ///
 /// A mapping is either *uniform* (one scale per axis, used when the backend
 /// cannot report per-monitor geometry) or *per-monitor* (each monitor has its
-/// own image rectangle, which keeps mixed-DPI crops pixel-exact).
+/// own image rectangle, which keeps mixed-DPI crops inside a monitor
+/// pixel-exact).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CaptureMapping {
     desktop: LogicalRect,
@@ -91,9 +92,11 @@ impl CaptureMapping {
 
     /// Builds a per-monitor mapping from exact monitor rectangles.
     ///
-    /// This is what makes mixed-DPI crops exact: each monitor keeps its own
-    /// scale derived from its logical and pixel rectangles. Every monitor
-    /// rectangle must be non-empty and inside the captured image.
+    /// This is what makes mixed-DPI crops inside a monitor exact: each monitor
+    /// keeps its own scale derived from its logical and pixel rectangles. A
+    /// selection spanning monitors with different scales uses the bounding box
+    /// of the per-monitor pieces. Every monitor rectangle must be non-empty and
+    /// inside the captured image.
     pub fn with_monitors(
         desktop: LogicalRect,
         image: ImageSize,

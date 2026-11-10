@@ -38,15 +38,7 @@ impl CapturedImage {
         rgba: Vec<u8>,
         source: Option<String>,
     ) -> Result<Self, ImageError> {
-        let expected = usize::try_from(width)
-            .ok()
-            .and_then(|w| usize::try_from(height).ok().map(|h| (w, h)))
-            .and_then(|(w, h)| w.checked_mul(h))
-            .and_then(|pixels| pixels.checked_mul(4))
-            .ok_or(ImageError::TooLarge)?;
-        if expected > MAX_IMAGE_BYTES {
-            return Err(ImageError::TooLarge);
-        }
+        let expected = checked_rgba_bytes(width, height)?;
         if rgba.len() != expected {
             return Err(ImageError::BufferSizeMismatch {
                 expected,
@@ -119,8 +111,31 @@ impl CapturedImage {
     }
 }
 
+/// Computes the RGBA byte count and rejects images above [`MAX_IMAGE_BYTES`].
+fn checked_rgba_bytes(width: u32, height: u32) -> Result<usize, ImageError> {
+    let expected = usize::try_from(width)
+        .ok()
+        .and_then(|w| usize::try_from(height).ok().map(|h| (w, h)))
+        .and_then(|(w, h)| w.checked_mul(h))
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or(ImageError::TooLarge)?;
+    if expected > MAX_IMAGE_BYTES {
+        return Err(ImageError::TooLarge);
+    }
+    Ok(expected)
+}
+
 /// Decodes a PNG (or any format enabled in the `image` crate) into RGBA8.
+///
+/// The dimensions are read from the encoded header first so an oversized image
+/// is rejected before the decoder allocates its pixel buffer.
 pub fn decode_image(bytes: &[u8], source: Option<String>) -> Result<CapturedImage, ImageError> {
+    let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(ImageError::Io)?;
+    let (width, height) = reader.into_dimensions().map_err(ImageError::Decode)?;
+    checked_rgba_bytes(width, height)?;
+
     let decoded = image::load_from_memory(bytes).map_err(ImageError::Decode)?;
     let rgba = decoded.to_rgba8();
     let (width, height) = rgba.dimensions();
@@ -155,6 +170,18 @@ mod tests {
         assert_eq!(decoded.width(), 2);
         assert_eq!(decoded.height(), 2);
         assert_eq!(decoded.rgba(), &[255; 16]);
+    }
+
+    #[test]
+    fn rejects_oversized_dimensions_before_allocating() {
+        assert!(matches!(
+            CapturedImage::new(u32::MAX, u32::MAX, Vec::new(), None),
+            Err(ImageError::TooLarge)
+        ));
+        assert!(matches!(
+            checked_rgba_bytes(16_384, 16_384),
+            Err(ImageError::TooLarge)
+        ));
     }
 
     #[test]

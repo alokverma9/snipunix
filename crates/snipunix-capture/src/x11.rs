@@ -39,13 +39,23 @@ pub struct PixelMonitor {
 }
 
 impl PixelMonitor {
-    /// Converts to the toolkit-independent monitor-to-image mapping type.
+    /// Converts to the toolkit-independent monitor-to-image mapping type with
+    /// an unknown (`0`) monitor index.
+    ///
+    /// X11 does not expose a stable index. [`crate::CaptureFrame::monitor_images`]
+    /// assigns the list position with [`Self::image_rect_with_id`]; callers that
+    /// need name-based matching can use [`Self::name`].
     #[must_use]
     pub fn image_rect(&self) -> snipunix_core::MonitorImage {
+        self.image_rect_with_id(0)
+    }
+
+    /// Converts to the toolkit-independent mapping type using `id` as the
+    /// monitor index.
+    #[must_use]
+    pub fn image_rect_with_id(&self, id: u32) -> snipunix_core::MonitorImage {
         snipunix_core::MonitorImage {
-            // X11 does not expose a stable index; callers match by name and
-            // fall back to list order.
-            id: 0,
+            id,
             logical: snipunix_core::LogicalRect::new(
                 f64::from(self.rect.x),
                 f64::from(self.rect.y),
@@ -154,7 +164,40 @@ impl X11Connection {
         let (connection, screen) = RustConnection::connect(None)
             .map_err(|error| CaptureError::X11Unavailable(error.to_string()))?;
         debug!(screen, "connected to the X11 server");
-        Ok(Self { connection, screen })
+        let this = Self { connection, screen };
+        this.negotiate_extensions();
+        Ok(this)
+    }
+
+    /// Negotiates optional extensions before their requests are used.
+    ///
+    /// XFixes rejects `GetCursorImage` with `BadRequest` until the client has
+    /// called `QueryVersion`, so cursor compositing and diagnostics must do
+    /// this once per connection. A missing extension is not fatal: capture
+    /// continues without cursor/RandR support.
+    fn negotiate_extensions(&self) {
+        match self.connection.xfixes_query_version(5, 0) {
+            Ok(cookie) => match cookie.reply() {
+                Ok(reply) => debug!(
+                    major = reply.major_version,
+                    minor = reply.minor_version,
+                    "XFixes is available"
+                ),
+                Err(error) => debug!(%error, "XFixes version negotiation failed"),
+            },
+            Err(error) => debug!(%error, "XFixes is unavailable"),
+        }
+        match self.connection.randr_query_version(1, 5) {
+            Ok(cookie) => match cookie.reply() {
+                Ok(reply) => debug!(
+                    major = reply.major_version,
+                    minor = reply.minor_version,
+                    "RandR is available"
+                ),
+                Err(error) => debug!(%error, "RandR version negotiation failed"),
+            },
+            Err(error) => debug!(%error, "RandR is unavailable"),
+        }
     }
 
     fn root(&self) -> Result<(Window, u16, u16), CaptureError> {
@@ -721,7 +764,11 @@ mod tests {
         let mut destination = vec![0u8; 4 * 4 * 4];
         let source = vec![7u8; 2 * 2 * 4];
         blit(&mut destination, 4, &source, 2, 2, 1, 1);
-        assert_eq!(&destination[(1 * 4 + 1) * 4..(1 * 4 + 1) * 4 + 4], &[7; 4]);
+        let row = 1;
+        let column = 1;
+        let width = 4;
+        let offset = (row * width + column) * 4;
+        assert_eq!(&destination[offset..offset + 4], &[7; 4]);
         assert_eq!(&destination[0..4], &[0; 4]);
     }
 }

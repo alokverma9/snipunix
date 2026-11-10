@@ -87,9 +87,15 @@ pub fn spawn(
             let _ = thread.join();
             Err(error)
         }
-        Err(error) => Err(CaptureError::X11(format!(
-            "the X11 hotkey worker did not start: {error}"
-        ))),
+        Err(error) => {
+            // Tell a worker that is still connecting to stop, then detach it.
+            // Joining here could block the caller if the X server is wedged.
+            stop.store(true, Ordering::Relaxed);
+            tracing::warn!(%error, "the X11 hotkey worker did not report readiness");
+            Err(CaptureError::X11(format!(
+                "the X11 hotkey worker did not start: {error}"
+            )))
+        }
     }
 }
 
@@ -99,9 +105,9 @@ fn run(
     stop: Arc<AtomicBool>,
     ready: std::sync::mpsc::SyncSender<Result<(), CaptureError>>,
 ) {
-    let setup = RustConnection::connect(None).and_then(|(connection, screen)| {
+    let setup = RustConnection::connect(None).map(|(connection, screen)| {
         let root = connection.setup().roots[screen].root;
-        Ok((connection, root))
+        (connection, root)
     });
     let (connection, root) = match setup {
         Ok(value) => value,
@@ -116,8 +122,11 @@ fn run(
         return;
     }
     connection.flush().ok();
-    // Surface asynchronous GrabKey errors (BadAccess when another client owns
-    // the combination) before reporting success.
+    // Force a round-trip so the server has processed the GrabKey requests and
+    // queued any BadAccess errors before we inspect the event queue.
+    if let Ok(cookie) = connection.get_input_focus() {
+        let _ = cookie.reply();
+    }
     let mut errors = Vec::new();
     while let Ok(Some(event)) = connection.poll_for_event() {
         if let x11rb::protocol::Event::Error(error) = event {
@@ -185,9 +194,9 @@ fn grab_all(
 
 fn match_trigger(event: &KeyPressEvent, triggers: &[ParsedTrigger]) -> Option<usize> {
     let state = u16::from(event.state);
-    triggers.iter().position(|trigger| {
-        trigger.keycode == event.detail && trigger.masks.iter().any(|mask| *mask == state)
-    })
+    triggers
+        .iter()
+        .position(|trigger| trigger.keycode == event.detail && trigger.masks.contains(&state))
 }
 
 impl ParsedTrigger {

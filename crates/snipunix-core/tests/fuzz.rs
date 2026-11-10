@@ -4,8 +4,8 @@
 //! that must hold for every pointer sequence.
 
 use snipunix_core::{
-    CaptureMapping, ImageSize, LogicalPoint, LogicalRect, MIN_SELECTION_SIZE, Selection,
-    SelectionPhase,
+    CaptureMapping, ImageRect, ImageSize, LogicalPoint, LogicalRect, MIN_SELECTION_SIZE,
+    MonitorImage, Selection, SelectionPhase,
 };
 
 struct Lcg(u64);
@@ -111,6 +111,43 @@ fn randomized_mappings_never_escape_the_captured_image() {
         if let Some(mapped) = mapping.virtual_to_image(rect) {
             assert!(mapped.x <= image.width);
             assert!(mapped.y <= image.height);
+            assert!(mapped.x.saturating_add(mapped.width) <= image.width);
+            assert!(mapped.y.saturating_add(mapped.height) <= image.height);
+            assert!(mapped.width > 0 && mapped.height > 0);
+        }
+    }
+}
+
+#[test]
+fn randomized_per_monitor_mappings_never_escape_the_captured_image() {
+    // Left monitor at 2x and right monitor at 1x, mirroring the mixed-DPI
+    // layout used by the GUI's per-monitor mapping path.
+    let desktop = LogicalRect::new(0.0, 0.0, 2240.0, 1080.0);
+    let image = ImageSize::new(3200, 1080);
+    let mapping = CaptureMapping::with_monitors(
+        desktop,
+        image,
+        vec![
+            MonitorImage {
+                id: 0,
+                logical: LogicalRect::new(0.0, 0.0, 960.0, 540.0),
+                image: ImageRect::new(0, 0, 1920, 1080),
+            },
+            MonitorImage {
+                id: 1,
+                logical: LogicalRect::new(960.0, 0.0, 1280.0, 720.0),
+                image: ImageRect::new(1920, 0, 1280, 720),
+            },
+        ],
+    )
+    .expect("valid per-monitor mapping");
+    let mut random = Lcg(0x0ddc_0ffe_e123_4567);
+
+    for _ in 0..25_000 {
+        let x = random.coordinate(desktop.width + 2000.0) - 1500.0;
+        let y = random.coordinate(desktop.height + 2000.0) - 1300.0;
+        let rect = LogicalRect::new(x, y, random.coordinate(2500.0), random.coordinate(2500.0));
+        if let Some(mapped) = mapping.virtual_to_image(rect) {
             assert!(mapped.x.saturating_add(mapped.width) <= image.width);
             assert!(mapped.y.saturating_add(mapped.height) <= image.height);
             assert!(mapped.width > 0 && mapped.height > 0);

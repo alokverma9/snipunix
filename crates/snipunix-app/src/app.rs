@@ -194,6 +194,9 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     if cli.delay > 0 {
         loaded.capture.delay = cli.delay;
     }
+    if cli.include_cursor {
+        loaded.capture.include_cursor = true;
+    }
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -648,6 +651,9 @@ fn request_capture(state: &Rc<AppState>, target: CaptureTarget) {
         // parent (its xdg-foreign handle would be gone); the portal dialog is
         // still shown by the compositor when permission is required.
         let backend = AutoCapture::new(state.backend_preference.get());
+        // Read the setting before awaiting so no RefCell borrow is held across
+        // the capture future.
+        let include_cursor = state.settings.borrow().capture.include_cursor;
         let result = backend
             .capture(CaptureOptions {
                 interactive: false,
@@ -656,7 +662,7 @@ fn request_capture(state: &Rc<AppState>, target: CaptureTarget) {
                     CaptureTarget::Window => state.pending_window.get(),
                     _ => None,
                 },
-                include_cursor: state.settings.borrow().capture.include_cursor,
+                include_cursor,
             })
             .await;
         state.set_busy(false);
