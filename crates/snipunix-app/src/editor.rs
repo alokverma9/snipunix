@@ -497,6 +497,8 @@ fn properties_panel(inner: &Rc<RefCell<Inner>>, ui: &Ui) -> gtk::Widget {
     let palette = gtk::Box::new(gtk::Orientation::Horizontal, 2);
     for (name, color) in snipunix_annotate::color::PRESETS {
         let button = gtk::Button::with_label(&name[..1]);
+        let accessible = format!("{name} stroke colour");
+        button.update_property(&[gtk::accessible::Property::Label(&accessible)]);
         button.set_tooltip_text(Some(name));
         button.set_width_request(24);
         let state = Rc::clone(inner);

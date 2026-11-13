@@ -318,7 +318,14 @@ impl X11Connection {
             }
         };
         if options.include_cursor {
-            self.composite_cursor(&mut rgba, (origin_x, origin_y), screen);
+            // Window captures use a window-sized buffer, not the screen-sized
+            // root buffer: the compositor must use the window geometry as its
+            // stride or the pointer lands on the wrong pixels.
+            self.composite_cursor(
+                &mut rgba,
+                (origin_x, origin_y),
+                ImageSize::new(u32::from(width), u32::from(height)),
+            );
         }
         let decoded = CapturedImage::new(
             u32::from(width),
@@ -333,10 +340,47 @@ impl X11Connection {
         })
     }
 
+    /// Classifies the connected server from its extension set.
+    ///
+    /// This is a heuristic: XWayland identifies itself with the `XWAYLAND`
+    /// extension, while a native Xorg server advertises `DRI3` and/or
+    /// `XFree86-VidModeExtension`. Xvfb and other virtual servers advertise
+    /// neither, which is enough to keep a test display from being reported as
+    /// the user's desktop.
+    fn server_kind(&self) -> &'static str {
+        let present = |name: &str| {
+            self.connection
+                .query_extension(name.as_bytes())
+                .ok()
+                .and_then(|cookie| cookie.reply().ok())
+                .is_some_and(|reply| reply.present)
+        };
+
+        if present("XWAYLAND") {
+            "XWayland (Wayland-backed)"
+        } else if present("DRI3") || present("XFree86-VidModeExtension") {
+            "Xorg (native X11)"
+        } else {
+            "Xvfb or another virtual X server"
+        }
+    }
+
     /// Telemetry-free summary of the X11 screens, monitors, and extensions.
     pub fn diagnostics(&self) -> Result<String, CaptureError> {
         let (root, width, height) = self.root()?;
         let mut out = String::new();
+        let setup = self.connection.setup();
+        out.push_str(&format!(
+            "X11 display: {}\n",
+            std::env::var("DISPLAY").unwrap_or_else(|_| "unknown".to_string())
+        ));
+        out.push_str(&format!(
+            "X11 server: {} (vendor release {}, protocol {}.{})\n",
+            self.server_kind(),
+            setup.release_number,
+            setup.protocol_major_version,
+            setup.protocol_minor_version,
+        ));
         out.push_str(&format!("X11 root: {width}x{height} (window {root:#x})\n"));
         let monitors = self.monitor_rects(width, height);
         out.push_str(&format!("X11 monitors: {}\n", monitors.len()));
@@ -362,6 +406,17 @@ impl X11Connection {
             "unavailable"
         };
         out.push_str(&format!("XFixes cursor: {xfixes}\n"));
+
+        // Probe one pixel so the report distinguishes a display that permits
+        // root-window reads from one that does not. XWayland rejects
+        // `GetImage` on the root window, so a Wayland session must use the
+        // portal for screen capture even though window captures work over X11.
+        match Image::get(&self.connection, root, 0, 0, 1, 1) {
+            Ok(_) => out.push_str("X11 screen capture: available\n"),
+            Err(error) => {
+                out.push_str(&format!("X11 screen capture: unavailable ({error})\n"));
+            }
+        }
         Ok(out)
     }
 
@@ -770,5 +825,79 @@ mod tests {
         let offset = (row * width + column) * 4;
         assert_eq!(&destination[offset..offset + 4], &[7; 4]);
         assert_eq!(&destination[0..4], &[0; 4]);
+    }
+
+    fn solid_cursor(x: i32, y: i32, width: usize, height: usize, argb: u32) -> CursorImage {
+        CursorImage {
+            x,
+            y,
+            width,
+            height,
+            pixels: vec![argb; width * height],
+        }
+    }
+
+    #[test]
+    fn composite_clips_cursor_at_screen_edges() {
+        // A 3×3 cursor whose top-left corner is one pixel outside the screen
+        // must leave the off-screen row/column untouched.
+        let mut top_left = vec![0u8; 4 * 4 * 4];
+        solid_cursor(-1, -1, 3, 3, 0xffff_0000).composite(
+            &mut top_left,
+            (0, 0),
+            ImageSize::new(4, 4),
+        );
+        for y in 0..2u32 {
+            for x in 0..2u32 {
+                let index = ((y * 4 + x) * 4) as usize;
+                assert_eq!(&top_left[index..index + 3], &[255, 0, 0]);
+            }
+        }
+        // Row 2 and column 2 are outside the cursor footprint.
+        assert_eq!(&top_left[(2 * 4 * 4)..(2 * 4 * 4 + 3)], &[0, 0, 0]);
+
+        // A cursor starting at the bottom-right corner contributes one pixel.
+        let mut bottom_right = vec![0u8; 4 * 4 * 4];
+        solid_cursor(3, 3, 3, 3, 0xffff_0000).composite(
+            &mut bottom_right,
+            (0, 0),
+            ImageSize::new(4, 4),
+        );
+        let last = ((3 * 4 + 3) * 4) as usize;
+        assert_eq!(&bottom_right[last..last + 3], &[255, 0, 0]);
+        assert_eq!(&bottom_right[0..3], &[0, 0, 0]);
+    }
+
+    #[test]
+    fn composite_blends_cursor_over_background() {
+        let mut rgba = vec![10, 20, 30, 255];
+        // alpha 0x80, red 0xc8, green 0x64, blue 0x32.
+        solid_cursor(0, 0, 1, 1, 0x80c8_6432).composite(&mut rgba, (0, 0), ImageSize::new(1, 1));
+        assert_eq!(rgba, vec![105, 60, 40, 255]);
+    }
+
+    #[test]
+    fn composite_uses_the_window_buffer_stride() {
+        // A 4×4 window buffer at origin (100, 100). The pointer at (101, 101)
+        // must land at buffer pixel (1, 1), not at a screen-width offset.
+        let mut rgba = vec![0u8; 4 * 4 * 4];
+        solid_cursor(101, 101, 1, 1, 0xffff_0000).composite(
+            &mut rgba,
+            (100, 100),
+            ImageSize::new(4, 4),
+        );
+        let row = 1;
+        let column = 1;
+        let index = (row * 4 + column) * 4;
+        assert_eq!(&rgba[index..index + 3], &[255, 0, 0]);
+        assert_eq!(&rgba[0..3], &[0, 0, 0]);
+        assert_eq!(&rgba[(3 * 4 * 4)..(3 * 4 * 4 + 3)], &[0, 0, 0]);
+    }
+
+    #[test]
+    fn composite_skips_transparent_cursor_pixels() {
+        let mut rgba = vec![10, 20, 30, 255];
+        solid_cursor(0, 0, 2, 2, 0x00ff_ffff).composite(&mut rgba, (0, 0), ImageSize::new(1, 1));
+        assert_eq!(rgba, vec![10, 20, 30, 255]);
     }
 }
