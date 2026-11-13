@@ -11,7 +11,9 @@
     "--share=ipc",
     "--socket=wayland",
     "--socket=fallback-x11",
-    "--device=dri"
+    "--socket=pulseaudio",
+    "--device=dri",
+    "--filesystem=xdg-videos"
   ],
   "modules": [
     {

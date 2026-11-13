@@ -1,6 +1,7 @@
 //! GTK4 + Libadwaita application shell and capture flow.
 
 use std::cell::{Cell, RefCell};
+use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -9,14 +10,17 @@ use libadwaita as adw;
 use snipunix_annotate::{ExportFormat, RenderedImage};
 use snipunix_capture::{
     AutoCapture, CaptureBackend, CaptureError, CaptureFrame, CaptureOptions, CapturedImage,
-    PixelMonitor,
+    PixelMonitor, ScreencastOptions, ScreencastSession, screencast,
 };
-use snipunix_core::{CaptureMapping, ImageRect, LogicalRect, MappingError, MonitorImage};
+use snipunix_core::{
+    CaptureMapping, ImageRect, LogicalPoint, LogicalRect, LogicalSize, MappingError, MonitorImage,
+};
 use snipunix_overlay::{
     OverlayFrames, OverlayOptions, OverlayResult, collect_monitors, layout_from_monitors, present,
     start_countdown,
 };
 
+use snipunix_record::{PipeWireStream, RecordOptions, Recorder, VideoSource};
 use snipunix_settings::{CaptureMode, Settings};
 
 use crate::cli::{CaptureTarget, Cli};
@@ -46,6 +50,8 @@ pub fn run(cli: Cli) -> glib::ExitCode {
     app.set_accels_for_action("app.capture-region", &["<Control><Shift>s"]);
     app.set_accels_for_action("app.capture-screen", &["<Control><Shift>a"]);
     app.set_accels_for_action("app.capture-window", &["<Control><Shift>w"]);
+    app.set_accels_for_action("app.record-screen", &["<Control><Shift>r"]);
+    app.set_accels_for_action("app.record-region", &["<Control><Shift><Alt>r"]);
     app.set_accels_for_action("app.annotate", &["<Control>e"]);
     app.set_accels_for_action("app.undo", &["<Control>z"]);
     app.set_accels_for_action("app.redo", &["<Control><Shift>z"]);
@@ -133,6 +139,25 @@ struct AppState {
     annotate_button: gtk::Button,
     adjust_button: gtk::Button,
     editor: RefCell<Option<Rc<EditorView>>>,
+    recording: RefCell<Option<ActiveRecording>>,
+    recording_window: RefCell<Option<gtk::Window>>,
+    recording_time: RefCell<Option<gtk::Label>>,
+    recording_pause: RefCell<Option<gtk::Button>>,
+    recording_timer: RefCell<Option<glib::SourceId>>,
+}
+
+struct ActiveRecording {
+    recorder: Recorder,
+    session: ScreencastSession,
+}
+
+/// What an overlay selection should do when the user releases the drag.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OverlayPurpose {
+    /// Crop and show the frozen screenshot as a still image.
+    Capture,
+    /// Use the rectangle as the crop for a ScreenCast recording.
+    RecordRegion,
 }
 
 #[derive(Clone)]
@@ -209,19 +234,35 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     let title = adw::WindowTitle::new("Snipunix", "Screenshot. Annotate. Share.");
     header.set_title_widget(Some(&title));
 
-    let menu = gio::Menu::new();
-    menu.append(Some("Capture Window…"), Some("app.capture-window"));
-    menu.append(
-        Some("Register Global Shortcuts"),
-        Some("app.register-shortcuts"),
-    );
-    menu.append(Some("Settings…"), Some("app.settings"));
-    menu.append(Some("Portal Information"), Some("app.portal-info"));
-    menu.append(Some("About Snipunix"), Some("app.about"));
-    menu.append(Some("Quit"), Some("app.quit"));
+    let menu_popover = gtk::Popover::new();
+    menu_popover.set_has_arrow(false);
+    let menu_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    menu_box.add_css_class("menu");
+    for (label, action) in [
+        ("Capture Window…", "app.capture-window"),
+        ("Record Screen…", "app.record-screen"),
+        ("Record Region…", "app.record-region"),
+        ("Register Global Shortcuts", "app.register-shortcuts"),
+        ("Settings…", "app.settings"),
+        ("Portal Information", "app.portal-info"),
+        ("About Snipunix", "app.about"),
+        ("Quit", "app.quit"),
+    ] {
+        let item = gtk::Button::with_label(label);
+        item.set_action_name(Some(action));
+        item.set_halign(gtk::Align::Fill);
+        item.add_css_class("flat");
+        if let Some(child) = item.child().and_downcast::<gtk::Label>() {
+            child.set_xalign(0.0);
+        }
+        let popover = menu_popover.clone();
+        item.connect_clicked(move |_| popover.popdown());
+        menu_box.append(&item);
+    }
+    menu_popover.set_child(Some(&menu_box));
     let menu_button = gtk::MenuButton::builder()
         .icon_name("open-menu-symbolic")
-        .menu_model(&menu)
+        .popover(&menu_popover)
         .tooltip_text("Main menu")
         .build();
     header.pack_end(&menu_button);
@@ -241,8 +282,20 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     let screen_button = gtk::Button::with_label("Capture Screen");
     screen_button.set_action_name(Some("app.capture-screen"));
     screen_button.set_tooltip_text(Some("Capture the entire desktop"));
+    let record_button = gtk::Button::with_label("Record Screen");
+    record_button.set_action_name(Some("app.record-screen"));
+    record_button.set_tooltip_text(Some(
+        "Record a monitor or window through the ScreenCast portal",
+    ));
+    let record_region_button = gtk::Button::with_label("Record Region");
+    record_region_button.set_action_name(Some("app.record-region"));
+    record_region_button.set_tooltip_text(Some(
+        "Select a region on screen, then record a monitor through the ScreenCast portal",
+    ));
     action_bar.append(&region_button);
     action_bar.append(&screen_button);
+    action_bar.append(&record_button);
+    action_bar.append(&record_region_button);
 
     let delay_label = gtk::Label::new(Some("Delay"));
     delay_label.add_css_class("dim-label");
@@ -381,6 +434,11 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
         annotate_button,
         adjust_button,
         editor: RefCell::new(None),
+        recording: RefCell::new(None),
+        recording_window: RefCell::new(None),
+        recording_time: RefCell::new(None),
+        recording_pause: RefCell::new(None),
+        recording_timer: RefCell::new(None),
     });
 
     let delay_state = Rc::downgrade(&state);
@@ -427,6 +485,22 @@ fn install_actions(state: &Rc<AppState>) {
     add_action(app, "capture-window", {
         let state = Rc::clone(state);
         move || start_capture(&state, CaptureTarget::Window)
+    });
+    add_action(app, "record-screen", {
+        let state = Rc::clone(state);
+        move || start_recording(&state, None)
+    });
+    add_action(app, "record-region", {
+        let state = Rc::clone(state);
+        move || start_region_recording(&state)
+    });
+    add_action(app, "toggle-recording-pause", {
+        let state = Rc::clone(state);
+        move || toggle_recording_pause(&state)
+    });
+    add_action(app, "stop-recording", {
+        let state = Rc::clone(state);
+        move || stop_recording(&state)
     });
     add_action(app, "register-shortcuts", {
         let state = Rc::clone(state);
@@ -673,6 +747,380 @@ fn request_capture(state: &Rc<AppState>, target: CaptureTarget) {
     });
 }
 
+fn default_recording_path(state: &AppState) -> PathBuf {
+    let stamp = glib::DateTime::now_local()
+        .ok()
+        .and_then(|date| date.format("%Y-%m-%d_%H-%M-%S").ok())
+        .map_or_else(|| "recording".to_string(), |value| value.to_string());
+    state
+        .settings
+        .borrow()
+        .recording_directory()
+        .join(format!("Recording_{stamp}.mp4"))
+}
+
+/// Captures a frozen screenshot, lets the user outline a rectangle, and then
+/// starts a recording cropped to that rectangle on the selected monitor.
+fn start_region_recording(state: &Rc<AppState>) {
+    if state.recording.borrow().is_some() {
+        state.toast("A recording is already in progress.");
+        return;
+    }
+    if state.busy.get() || state.overlay_active.get() {
+        state.toast("A capture is already in progress.");
+        return;
+    }
+    state.set_busy(true);
+    state.set_status("Choose a region to record…");
+    state.window.set_visible(false);
+
+    let state = Rc::clone(state);
+    glib::spawn_future_local(async move {
+        glib::timeout_future(std::time::Duration::from_millis(180)).await;
+        let backend = AutoCapture::new(state.backend_preference.get());
+        let include_cursor = state.settings.borrow().capture.include_cursor;
+        let result = backend
+            .capture(CaptureOptions {
+                interactive: false,
+                parent: None,
+                window: None,
+                include_cursor,
+            })
+            .await;
+        state.set_busy(false);
+        match result {
+            Ok(frame) => {
+                let options = overlay_options(&state, None);
+                begin_overlay(&state, frame, options, OverlayPurpose::RecordRegion);
+            }
+            Err(error) => handle_capture_error(&state, &error),
+        }
+    });
+}
+
+fn start_recording(state: &Rc<AppState>, region: Option<LogicalRect>) {
+    if state.recording.borrow().is_some() {
+        state.toast("A recording is already in progress.");
+        return;
+    }
+    if state.busy.get() || state.overlay_active.get() {
+        state.toast("A capture is already in progress.");
+        return;
+    }
+
+    let (include_cursor, restore_token, fps, bitrate_kbps, audio) = {
+        let settings = state.settings.borrow();
+        (
+            settings.recording.include_cursor,
+            settings.recording.restore_token.clone(),
+            settings.recording.fps,
+            settings.recording.bitrate_kbps,
+            snipunix_record::AudioOptions {
+                microphone: settings.recording.microphone,
+                system: settings.recording.system_audio,
+            },
+        )
+    };
+    let output = default_recording_path(state);
+
+    state.set_busy(true);
+    let status = if region.is_some() {
+        "Choose the monitor or window that contains the selected region…"
+    } else {
+        "Choose a monitor or window to record…"
+    };
+    state.set_status(status);
+    state.window.set_visible(false);
+
+    let state = Rc::clone(state);
+    glib::spawn_future_local(async move {
+        screencast::register_host_identity(APP_ID).await;
+        let session = match screencast::open(
+            ScreencastOptions::recording(include_cursor, restore_token),
+            screencast::DEFAULT_SCREENCAST_TIMEOUT,
+        )
+        .await
+        {
+            Ok(session) => session,
+            Err(error) => {
+                state.set_busy(false);
+                state.window.present();
+                report_recording_error(&state, &error);
+                return;
+            }
+        };
+
+        let Some(stream) = session.primary_stream() else {
+            state.set_busy(false);
+            state.window.present();
+            state.toast("The ScreenCast portal returned no stream.");
+            session.close().await;
+            return;
+        };
+
+        let crop = match region {
+            Some(region) => {
+                let origin = stream
+                    .position
+                    .map_or(LogicalPoint::new(0.0, 0.0), |(x, y)| {
+                        LogicalPoint::new(f64::from(x), f64::from(y))
+                    });
+                let size = stream
+                    .logical_size
+                    .map(|(width, height)| LogicalSize::new(f64::from(width), f64::from(height)));
+                let Some(crop) = size.and_then(|size| {
+                    snipunix_record::LogicalCrop::from_desktop(region, origin, size)
+                }) else {
+                    state.set_busy(false);
+                    state.window.present();
+                    state.toast(
+                        "The selected region is not entirely inside the recorded monitor. \
+                         Record again and choose the monitor that contains it.",
+                    );
+                    state.set_status("The selected region does not fit the recorded monitor.");
+                    session.close().await;
+                    return;
+                };
+                Some(crop)
+            }
+            None => None,
+        };
+
+        let source = VideoSource::PipeWire(PipeWireStream {
+            fd: session.pipewire_fd().as_raw_fd(),
+            node_id: stream.node_id,
+            serial: stream.serial,
+            logical_size: stream.logical_size,
+        });
+
+        if let Some(token) = session.restore_token() {
+            let token = token.to_string();
+            let mut settings = state.settings.borrow_mut();
+            if settings.recording.restore_token.as_deref() != Some(token.as_str()) {
+                settings.recording.restore_token = Some(token);
+                drop(settings);
+                persist_settings(&state);
+            }
+        }
+
+        let recorder = Recorder::start(
+            source,
+            RecordOptions {
+                output,
+                fps,
+                bitrate_kbps,
+                crop,
+                audio,
+            },
+        );
+        state.set_busy(false);
+        match recorder {
+            Ok(recorder) => {
+                state
+                    .recording
+                    .replace(Some(ActiveRecording { recorder, session }));
+                show_recording_indicator(&state);
+                start_recording_timer(&state);
+                state.set_status("Recording. Pause or stop from the recording window.");
+            }
+            Err(error) => {
+                state.window.present();
+                state.toast(format!("Could not start recording: {error}"));
+                state.set_status("Recording could not start.");
+                glib::spawn_future_local(async move {
+                    session.close().await;
+                });
+            }
+        }
+    });
+}
+
+fn report_recording_error(state: &Rc<AppState>, error: &CaptureError) {
+    let message = match error {
+        CaptureError::Cancelled | CaptureError::CancelledWithDetail(_) => {
+            "Recording cancelled.".to_string()
+        }
+        CaptureError::PermissionDenied | CaptureError::PermissionDeniedWithDetail(_) => {
+            "Screen recording permission was denied. Allow Snipunix in the desktop's \
+             ScreenCast settings and try again."
+                .to_string()
+        }
+        CaptureError::PortalUnavailable(_) => {
+            "No ScreenCast portal is available. Install xdg-desktop-portal and a desktop \
+             backend, then try again."
+                .to_string()
+        }
+        CaptureError::Timeout(duration) => {
+            format!("The ScreenCast portal did not respond within {duration:?}.")
+        }
+        other => format!("Could not start recording: {other}"),
+    };
+    state.set_status(&message);
+    if !matches!(
+        error,
+        CaptureError::Cancelled | CaptureError::CancelledWithDetail(_)
+    ) {
+        state.toast(&message);
+    }
+}
+
+fn format_elapsed(elapsed: std::time::Duration) -> String {
+    let total = elapsed.as_secs();
+    let hours = total / 3600;
+    let minutes = (total % 3600) / 60;
+    let seconds = total % 60;
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes:02}:{seconds:02}")
+    }
+}
+
+fn show_recording_indicator(state: &Rc<AppState>) {
+    let window = gtk::Window::builder()
+        .title("Snipunix Recording")
+        .default_width(320)
+        .resizable(false)
+        .build();
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    row.set_margin_top(10);
+    row.set_margin_bottom(10);
+    row.set_margin_start(12);
+    row.set_margin_end(12);
+    let dot = gtk::Label::new(Some("●"));
+    dot.set_markup("<span foreground=\"#e01b24\">●</span>");
+    let time = gtk::Label::new(Some("00:00"));
+    time.add_css_class("monospace");
+    time.set_xalign(0.0);
+    time.set_hexpand(true);
+    let pause = gtk::Button::with_label("Pause");
+    pause.set_tooltip_text(Some("Pause or resume the recording"));
+    let stop = gtk::Button::with_label("Stop");
+    stop.add_css_class("destructive-action");
+    stop.set_tooltip_text(Some("Stop and save the recording"));
+    row.append(&dot);
+    row.append(&time);
+    row.append(&pause);
+    row.append(&stop);
+    window.set_child(Some(&row));
+
+    let pause_state = Rc::downgrade(state);
+    pause.connect_clicked(move |_button| {
+        if let Some(state) = pause_state.upgrade() {
+            toggle_recording_pause(&state);
+        }
+    });
+    let stop_state = Rc::downgrade(state);
+    stop.connect_clicked(move |_button| {
+        if let Some(state) = stop_state.upgrade() {
+            stop_recording(&state);
+        }
+    });
+    let close_state = Rc::downgrade(state);
+    window.connect_close_request(move |_window| {
+        if let Some(state) = close_state.upgrade() {
+            stop_recording(&state);
+        }
+        glib::Propagation::Stop
+    });
+
+    window.present();
+    state.recording_window.replace(Some(window));
+    state.recording_time.replace(Some(time));
+    state.recording_pause.replace(Some(pause));
+}
+
+fn start_recording_timer(state: &Rc<AppState>) {
+    let weak = Rc::downgrade(state);
+    let source = glib::timeout_add_local(std::time::Duration::from_millis(250), move || {
+        let Some(state) = weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        let error = {
+            let mut active = state.recording.borrow_mut();
+            let Some(active) = active.as_mut() else {
+                return glib::ControlFlow::Break;
+            };
+            if let Some(label) = state.recording_time.borrow().as_ref() {
+                label.set_label(&format_elapsed(active.recorder.elapsed()));
+            }
+            active.recorder.take_error()
+        };
+        if let Some(error) = error {
+            state.toast(format!("Recording failed: {error}"));
+            stop_recording(&state);
+            return glib::ControlFlow::Break;
+        }
+        glib::ControlFlow::Continue
+    });
+    state.recording_timer.replace(Some(source));
+}
+
+fn toggle_recording_pause(state: &Rc<AppState>) {
+    let (paused, result) = {
+        let mut slot = state.recording.borrow_mut();
+        let Some(active) = slot.as_mut() else {
+            return;
+        };
+        let paused = active.recorder.state() == snipunix_record::RecorderState::Paused;
+        let result = if paused {
+            active.recorder.resume()
+        } else {
+            active.recorder.pause()
+        };
+        (paused, result)
+    };
+    match result {
+        Ok(()) => {
+            if let Some(button) = state.recording_pause.borrow().as_ref() {
+                button.set_label(if paused { "Pause" } else { "Resume" });
+            }
+            state.set_status(if paused {
+                "Recording resumed."
+            } else {
+                "Recording paused."
+            });
+        }
+        Err(error) => state.toast(format!("Could not change the recording state: {error}")),
+    }
+}
+
+fn stop_recording(state: &Rc<AppState>) {
+    if let Some(source) = state.recording_timer.take() {
+        source.remove();
+    }
+    let Some(ActiveRecording { recorder, session }) = state.recording.take() else {
+        return;
+    };
+    let result = recorder.stop();
+    glib::spawn_future_local(async move {
+        session.close().await;
+    });
+
+    if let Some(window) = state.recording_window.take() {
+        window.destroy();
+    }
+    state.recording_time.take();
+    state.recording_pause.take();
+    state.window.present();
+
+    match result {
+        Ok(file) => {
+            state.set_status(format!("Recording saved to {}.", file.path.display()));
+            state.toast(format!(
+                "Recording saved to {} ({:.0} s, {:.1} MB).",
+                file.path.display(),
+                file.duration.as_secs_f64(),
+                file.bytes as f64 / 1_048_576.0,
+            ));
+        }
+        Err(error) => {
+            state.set_status("Recording failed.");
+            state.toast(format!("Could not save the recording: {error}"));
+        }
+    }
+}
+
 fn handle_capture(state: &Rc<AppState>, frame: CaptureFrame, target: CaptureTarget) {
     state.window.present();
     close_editor(state);
@@ -715,7 +1163,12 @@ fn handle_capture(state: &Rc<AppState>, frame: CaptureFrame, target: CaptureTarg
             } else {
                 None
             };
-            begin_overlay(state, frame, overlay_options(state, initial));
+            begin_overlay(
+                state,
+                frame,
+                overlay_options(state, initial),
+                OverlayPurpose::Capture,
+            );
         }
         CaptureTarget::Window => {
             // Window captures are already cropped by the backend.
@@ -792,7 +1245,12 @@ fn handle_capture_error(state: &Rc<AppState>, error: &CaptureError) {
     state.quit_if_requested();
 }
 
-fn begin_overlay(state: &Rc<AppState>, frame: CaptureFrame, options: OverlayOptions) {
+fn begin_overlay(
+    state: &Rc<AppState>,
+    frame: CaptureFrame,
+    options: OverlayOptions,
+    purpose: OverlayPurpose,
+) {
     let monitors = match collect_monitors() {
         Ok(monitors) => monitors,
         Err(error) => {
@@ -827,11 +1285,17 @@ fn begin_overlay(state: &Rc<AppState>, frame: CaptureFrame, options: OverlayOpti
     let frames = overlay_frames(&full, &monitors, &mapping);
 
     state.overlay_active.set(true);
-    state.set_status(if options.auto_commit_on_release {
-        "Drag to select a region; release captures it. Escape cancels."
-    } else {
-        "Drag the handles or move the selection, then press Enter or Ctrl+C to copy. \
-         Escape clears the selection."
+    state.set_status(match (purpose, options.auto_commit_on_release) {
+        (OverlayPurpose::RecordRegion, _) => {
+            "Drag over the region to record; release starts the ScreenCast picker. Escape cancels."
+        }
+        (OverlayPurpose::Capture, true) => {
+            "Drag to select a region; release captures it. Escape cancels."
+        }
+        (OverlayPurpose::Capture, false) => {
+            "Drag the handles or move the selection, then press Enter or Ctrl+C to copy. \
+             Escape clears the selection."
+        }
     });
 
     let state_done = Rc::clone(state);
@@ -843,12 +1307,18 @@ fn begin_overlay(state: &Rc<AppState>, frame: CaptureFrame, options: OverlayOpti
         options,
         move |result| {
             state_done.overlay_active.set(false);
-            state_done.window.present();
             match result {
-                OverlayResult::Selected { logical, image } => {
-                    commit_region(&state_done, &full, &pixel_monitors, logical, image);
-                }
+                OverlayResult::Selected { logical, image } => match purpose {
+                    OverlayPurpose::Capture => {
+                        state_done.window.present();
+                        commit_region(&state_done, &full, &pixel_monitors, logical, image);
+                    }
+                    OverlayPurpose::RecordRegion => {
+                        start_recording(&state_done, Some(logical));
+                    }
+                },
                 OverlayResult::Cancelled => {
+                    state_done.window.present();
                     state_done.set_status(if options.auto_commit_on_release {
                         "Selection cancelled."
                     } else {
@@ -1207,6 +1677,7 @@ fn adjust_region(state: &Rc<AppState>) {
             auto_commit_on_release: false,
             ..options
         },
+        OverlayPurpose::Capture,
     );
 }
 

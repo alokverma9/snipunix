@@ -21,6 +21,14 @@ pub const MAX_DELAY_SECONDS: u32 = 10;
 pub const DEFAULT_FILENAME_TEMPLATE: &str = "Screenshot_%Y-%m-%d_%H-%M-%S";
 /// Default OCR model directory name below the XDG data directory.
 pub const MODEL_DIRECTORY_NAME: &str = "models";
+/// Lowest recording frame rate offered in Settings.
+pub const MIN_RECORDING_FPS: u32 = 10;
+/// Highest recording frame rate offered in Settings.
+pub const MAX_RECORDING_FPS: u32 = 60;
+/// Lowest accepted recording bitrate, in kbit/s.
+pub const MIN_RECORDING_BITRATE_KBPS: u32 = 500;
+/// Highest accepted recording bitrate, in kbit/s.
+pub const MAX_RECORDING_BITRATE_KBPS: u32 = 50_000;
 
 /// All persisted settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -33,6 +41,7 @@ pub struct Settings {
     pub files: FileSettings,
     pub ocr: OcrSettings,
     pub appearance: AppearanceSettings,
+    pub recording: RecordingSettings,
 }
 
 impl Default for Settings {
@@ -45,6 +54,7 @@ impl Default for Settings {
             files: FileSettings::default(),
             ocr: OcrSettings::default(),
             appearance: AppearanceSettings::default(),
+            recording: RecordingSettings::default(),
         }
     }
 }
@@ -134,6 +144,31 @@ impl Settings {
             self.shortcuts.screen_trigger = ShortcutSettings::default().screen_trigger;
         }
         self.appearance.dim_strength = self.appearance.dim_strength.clamp(0.10, 0.85);
+        self.recording.fps = self
+            .recording
+            .fps
+            .clamp(MIN_RECORDING_FPS, MAX_RECORDING_FPS);
+        self.recording.bitrate_kbps = self
+            .recording
+            .bitrate_kbps
+            .clamp(MIN_RECORDING_BITRATE_KBPS, MAX_RECORDING_BITRATE_KBPS);
+        if self
+            .recording
+            .restore_token
+            .as_deref()
+            .is_some_and(|token| token.trim().is_empty())
+        {
+            self.recording.restore_token = None;
+        }
+    }
+
+    /// Directory for finished recordings.
+    #[must_use]
+    pub fn recording_directory(&self) -> PathBuf {
+        self.recording
+            .directory
+            .clone()
+            .unwrap_or_else(|| videos_dir().join("Screen Recordings"))
     }
 
     /// Default config file: `$XDG_CONFIG_HOME/snipunix/settings.toml`.
@@ -270,6 +305,36 @@ impl SaveFormat {
     }
 }
 
+/// Recording page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecordingSettings {
+    pub fps: u32,
+    pub bitrate_kbps: u32,
+    /// Ask the compositor to draw the pointer into the stream.
+    pub include_cursor: bool,
+    pub microphone: bool,
+    pub system_audio: bool,
+    /// Output directory override; defaults to `$XDG_VIDEOS_DIR/Screen Recordings`.
+    pub directory: Option<PathBuf>,
+    /// Opaque ScreenCast portal token that skips source selection next time.
+    pub restore_token: Option<String>,
+}
+
+impl Default for RecordingSettings {
+    fn default() -> Self {
+        Self {
+            fps: 30,
+            bitrate_kbps: 6000,
+            include_cursor: true,
+            microphone: false,
+            system_audio: false,
+            directory: None,
+            restore_token: None,
+        }
+    }
+}
+
 /// OCR page.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -348,6 +413,13 @@ fn pictures_dir() -> PathBuf {
     home_dir().join("Pictures")
 }
 
+fn videos_dir() -> PathBuf {
+    if let Some(value) = user_dir("XDG_VIDEOS_DIR") {
+        return value;
+    }
+    home_dir().join("Videos")
+}
+
 /// Reads a single `XDG_PICTURES_DIR` entry from `user-dirs.dirs`, which is how
 /// desktop environments record localised folder names.
 fn user_dir(name: &str) -> Option<PathBuf> {
@@ -394,6 +466,12 @@ mod tests {
         assert_eq!(settings.files.jpeg_quality, 90);
         assert!(!settings.ocr.auto_copy);
         assert!(settings.appearance.show_magnifier);
+        assert_eq!(settings.recording.fps, 30);
+        assert_eq!(settings.recording.bitrate_kbps, 6000);
+        assert!(settings.recording.include_cursor);
+        assert!(!settings.recording.microphone);
+        assert!(!settings.recording.system_audio);
+        assert!(settings.recording.restore_token.is_none());
     }
 
     #[test]
@@ -412,6 +490,11 @@ mod tests {
         settings.shortcuts.register_on_startup = true;
         settings.shortcuts.bound_description = "Ctrl+Shift+S — region".to_string();
         settings.appearance.dim_strength = 0.6;
+        settings.recording.fps = 60;
+        settings.recording.bitrate_kbps = 12_000;
+        settings.recording.microphone = true;
+        settings.recording.system_audio = true;
+        settings.recording.restore_token = Some("token-123".to_string());
 
         let text = settings.to_toml().unwrap();
         let parsed = Settings::from_toml(&text).unwrap();
@@ -480,6 +563,9 @@ mod tests {
         settings.shortcuts.region_trigger.clear();
         settings.shortcuts.screen_trigger.clear();
         settings.appearance.dim_strength = 2.0;
+        settings.recording.fps = 1;
+        settings.recording.bitrate_kbps = 1;
+        settings.recording.restore_token = Some("   ".to_string());
         settings.sanitize();
         assert_eq!(settings.capture.delay, MAX_DELAY_SECONDS);
         assert_eq!(settings.files.jpeg_quality, 1);
@@ -487,6 +573,25 @@ mod tests {
         assert_eq!(settings.shortcuts.region_trigger, "CTRL+SHIFT+s");
         assert_eq!(settings.shortcuts.screen_trigger, "CTRL+SHIFT+a");
         assert_eq!(settings.appearance.dim_strength, 0.85);
+        assert_eq!(settings.recording.fps, MIN_RECORDING_FPS);
+        assert_eq!(settings.recording.bitrate_kbps, MIN_RECORDING_BITRATE_KBPS);
+        assert!(settings.recording.restore_token.is_none());
+    }
+
+    #[test]
+    fn recording_directory_honours_override() {
+        let mut settings = Settings::default();
+        settings.recording.directory = Some(PathBuf::from("/tmp/recordings"));
+        assert_eq!(
+            settings.recording_directory(),
+            PathBuf::from("/tmp/recordings")
+        );
+        settings.recording.directory = None;
+        assert!(
+            settings
+                .recording_directory()
+                .ends_with("Screen Recordings")
+        );
     }
 
     #[test]

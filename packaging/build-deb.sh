@@ -56,13 +56,14 @@ Version: ${version}-1
 Section: graphics
 Priority: optional
 Architecture: ${arch}
-Depends: libgtk-4-1, libadwaita-1-0, xdg-desktop-portal
-Recommends: xdg-desktop-portal-gnome
+Depends: libgtk-4-1, libadwaita-1-0, xdg-desktop-portal, libgstreamer1.0-0, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-ugly, gstreamer1.0-libav
+Recommends: xdg-desktop-portal-gnome, gstreamer1.0-pulseaudio
 Maintainer: Snipunix contributors <noreply@example.com>
-Description: Screenshot, annotate, and local OCR for GNOME Wayland
+Description: Screenshot, annotate, record, and local OCR for GNOME Wayland
  Snipunix captures a region or the full screen through the desktop
- Screenshot portal, edits it non-destructively, and extracts text with
- on-device OCR. Images and recognised text never leave the machine.
+ Screenshot portal, records a monitor or region through ScreenCast,
+ edits captures non-destructively, and extracts text with on-device
+ OCR. Images, recordings, and recognised text never leave the machine.
 EOF
 
 mkdir -p dist

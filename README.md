@@ -1,14 +1,15 @@
 # Snipunix
 
-**Screenshot. Annotate. Share.**
+**Screenshot. Record. Annotate.**
 
-Snipunix is a Linux screenshot tool built for GNOME Wayland. This repository is
-the **M3 product**: portal capture, a frozen-image region overlay with
-move/resize handles, a magnifier, a delay countdown, clipboard copy, Save As,
-Adjust Region, a non-destructive annotation editor with PNG/JPEG/WebP export,
-local OCR with text extraction and opaque redaction, persisted settings,
-rebindable global shortcuts, a best-effort tray, first-run onboarding, and
-Flatpak/deb packages.
+Snipunix is a Linux screenshot and screen-recording tool built for GNOME
+Wayland. This repository is the **M5 product**: portal capture and ScreenCast
+recording, a frozen-image region overlay with move/resize handles, a magnifier,
+a delay countdown, clipboard copy, Save As, Adjust Region, a non-destructive
+annotation editor with PNG/JPEG/WebP export, local OCR with text extraction and
+opaque redaction, H.264 MP4/Matroska recording of a monitor or region with
+optional microphone/system audio, persisted settings, rebindable global
+shortcuts, a best-effort tray, first-run onboarding, and Flatpak/deb packages.
 
 Everything stays on the device. OCR uses a local ONNX model, and no screenshot
 or recognised text is sent anywhere. The only network operation is an explicit,
@@ -17,7 +18,7 @@ models installed.
 
 ## Status
 
-| Area | M3 state |
+| Area | M5 state |
 | --- | --- |
 | Full-screen capture | Works through `org.freedesktop.portal.Screenshot` v2 |
 | Headless CLI capture | `snipunix --capture screen --output PATH` |
@@ -31,21 +32,27 @@ models installed.
 | Local OCR | `ocrs`/`rten` engine, bundled pinned models, line/word boxes, email/phone detection |
 | OCR editor flow | Extract Text, selectable result, line-break and auto-copy options, Copy All, Redact detected |
 | Redaction | Opaque black annotation, compound undo, destructive pixels in exports |
-| Settings | Capture, Shortcuts, Files, Text Recognition, Appearance, About; saved immediately |
+| Screen recording | PipeWire ScreenCast, monitor or region, H.264 MP4/Matroska, restore token |
+| Recording controls | GUI start, pause/resume, stop, elapsed timer, indicator; `Ctrl+Shift+R` / `Ctrl+Shift+Alt+R` |
+| Recording CLI | `--record screen\|region`, duration, fps, audio, cursor, self-test |
+| Recording audio | Microphone and system-audio toggles (AAC), both off by default |
+| Settings | Capture, Shortcuts, Files, Recording, Text Recognition, Appearance, About; saved immediately |
 | Onboarding | First-run permission priming, shortcut setup, save folder, privacy summary |
 | Global shortcuts | Configured triggers, returned-description display, rebind, failure guidance |
 | Tray | Best-effort StatusNotifierItem: capture, show, settings, quit |
-| Packaging | Flatpak 0.4.0 and `snipunix_0.4.0_amd64.deb`, both with OCR models |
-| X11 capture / recording / audio / cloud / AI / telemetry / background service | Not implemented (out of scope) |
+| Packaging | Flatpak manifest and `snipunix_0.4.0_amd64.deb`; recording needs GStreamer runtime |
+| X11 recording / GIF export / live streaming / cloud / AI / telemetry / background service | Not implemented (out of scope) |
 
-Tested on Ubuntu 26.04, GNOME 50.1, Wayland, one 1920×1080 monitor. See
-[Known limitations](#known-limitations) before relying on any behaviour.
+Tested on Ubuntu 26.04, GNOME 50.1, Wayland, one 1920×1080 monitor with GStreamer
+1.28.2 and x264. See [Known limitations](#known-limitations) before relying on
+any behaviour.
 
 ## Requirements
 
 - Rust 1.85 or newer (edition 2024)
 - GTK 4 and libadwaita development files
-- `xdg-desktop-portal` with the GNOME backend
+- GStreamer 1.24+ development files and the base/good/ugly/libav/PulseAudio plugins
+- `xdg-desktop-portal` with the GNOME backend and ScreenCast support
 - Flatpak and `flatpak-builder` only for the Flatpak build
 - `dpkg-deb` only for the deb build
 
@@ -53,8 +60,15 @@ On Ubuntu:
 
 ```sh
 sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev \
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav \
+    gstreamer1.0-pulseaudio \
     xdg-desktop-portal xdg-desktop-portal-gnome flatpak flatpak-builder
 ```
+
+`x264enc` (from `gstreamer1.0-plugins-ugly`) is the software H.264 encoder used
+when VAAPI is unavailable. `snipunix --diagnostics` prints the GStreamer version
+and the encoders it can find.
 
 The Rust dependencies and their licenses are listed in
 [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
@@ -68,15 +82,19 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-M3 has **105 passing tests**: 43 annotation, 29 core, 8 capture, 6 app, 2 overlay,
-9 OCR, and 8 settings. The two model-gated OCR tests need the pinned models:
+M5 has **155 passing tests**: 43 annotation, 32 core, 21 capture, 25 record,
+11 app, 9 OCR, 9 settings, 3 fuzz, and 2 overlay. The two model-gated OCR
+tests need the pinned models:
 
 ```sh
 SNIPUNIX_OCR_TEST_MODELS=/path/to/models cargo test --workspace
 ```
 
-See [docs/M3_TEST_EVIDENCE.md](docs/M3_TEST_EVIDENCE.md) for commands, outputs,
-and the verification gaps.
+The recording tests include a real GStreamer encode and a pause/resume
+round-trip; they skip cleanly when `x264enc` is not installed.
+
+See [M5 test evidence](docs/M5_TEST_EVIDENCE.md) for commands, ffprobe
+output, CPU measurements, and the verification gaps.
 
 ## Run
 
@@ -136,6 +154,34 @@ Register the configured global shortcuts:
 ./target/debug/snipunix --register-shortcuts
 ```
 
+Record the selected monitor for 10 seconds:
+
+```sh
+./target/debug/snipunix --record screen --record-duration 10 \
+    --record-output /tmp/snipunix-screen.mp4
+```
+
+Record a 640×360 region of the selected monitor:
+
+```sh
+./target/debug/snipunix --record region --record-region 200,150,640,360 \
+    --record-duration 10 --record-output /tmp/snipunix-region.mp4
+```
+
+Record until `Ctrl+C`, with microphone audio and no cursor:
+
+```sh
+./target/debug/snipunix --record screen --record-duration 0 \
+    --record-audio mic --record-no-cursor \
+    --record-output "$HOME/Videos/Screen Recordings/demo.mkv"
+```
+
+Check the recording stack without touching the portal:
+
+```sh
+./target/debug/snipunix --record-selftest
+```
+
 ### Capture workflow
 
 1. Drag a rectangle. The frozen overlay dims the desktop and restores the
@@ -181,6 +227,35 @@ selection before release.
 - Snipunix stays resident while it owns the clipboard: closing the main window
   hides it instead of exiting. Use the menu **Quit** or Ctrl+Q to exit and
   release the clipboard.
+
+### Screen recording
+
+`Ctrl+Shift+R` records the selected monitor; `Ctrl+Shift+Alt+R` records a
+region. Region recording freezes the desktop, reuses the capture overlay for
+selection, then records that rectangle from the selected monitor stream.
+
+- A small indicator window shows the elapsed timer, **Pause/Resume**, and
+  **Stop**. Pausing excludes the paused interval from the file.
+- Recording stops on **Stop**, and the result is saved to the recording folder
+  with a toast. The indicator is a separate window, so it appears in
+  full-screen recordings.
+- Output is H.264 in MP4 by default. A `.mkv` or `.matroska` extension selects
+  Matroska instead.
+- The ScreenCast portal asks for a monitor the first time. The restore token is
+  persisted so later recordings start without the picker; **Reset ScreenCast
+  permission** in Settings clears it.
+- Microphone and system audio are independent toggles, both off by default.
+  They are muxed as AAC at 48 kHz stereo.
+
+Recording settings live on the **Recording** page in Settings: folder, fps
+(10–60), bitrate (500–50000 kbps), cursor, microphone, system audio, and the
+restore-token reset. The default folder is `$XDG_VIDEOS_DIR/Screen Recordings`,
+honouring `user-dirs.dirs`.
+
+The headless CLI prints the final path, duration, size, and dimensions. With
+`--record-duration 0`, `Ctrl+C` finalises the file before exit. Stop sends EOS
+and waits for the muxer; cancel deletes the partial file. A force-killed process
+cannot finalise the container.
 
 ### Annotation editor
 
@@ -252,12 +327,14 @@ The model URLs and SHA-256 digests are constants:
 ## Settings and onboarding
 
 Open **Settings…** from the menu or press `Ctrl+,`. The preferences dialog has
-six pages:
+seven pages:
 
 - **Capture** — default mode, delay, copy after capture, remember last region.
 - **Shortcuts** — register on startup, region/screen triggers, Register Now, and
   the trigger descriptions the portal actually returned.
 - **Files** — auto-save, save folder, filename template, format, JPEG quality.
+- **Recording** — recording folder, fps, bitrate, cursor, microphone, system
+  audio, and Reset ScreenCast permission.
 - **Text Recognition** — auto-copy, remove line breaks, model folder, Download
   Models.
 - **Appearance** — magnifier, dim strength, reduced motion.
@@ -303,6 +380,9 @@ The default triggers are:
 
 - `Ctrl+Shift+S` — capture a region
 - `Ctrl+Shift+A` — capture the full screen
+
+Recording is started from the app window or its accelerators
+(`Ctrl+Shift+R`, `Ctrl+Shift+Alt+R`); it is not yet a portal global shortcut.
 
 The portal may remap a request. Snipunix displays and persists the
 `trigger_description` the portal returned rather than claiming the requested
@@ -392,9 +472,11 @@ flatpak run --filesystem=/tmp io.github.alokverma9.snipunix \
     --capture screen --output /tmp/flatpak-screen.png
 ```
 
-The Flatpak gets `wayland`, `fallback-x11`, `ipc`, and `dri` access. It does not
-request broad filesystem access; screenshot files are handled through the
-portal. In the sandbox the portal returns a document-portal path such as
+The Flatpak gets `wayland`, `fallback-x11`, `ipc`, `dri`, `pulseaudio`, and
+`xdg-videos` access. `org.gnome.Platform` supplies the GStreamer runtime and
+x264 plugin; `pulseaudio` is needed for microphone and system-audio capture, and
+`xdg-videos` for the default recording folder. Screenshot files are still
+handled through the portal. In the sandbox the portal returns a document-portal path such as
 `/run/user/1000/doc/<id>/Screenshot-5.png`. That path is read-only, so the
 best-effort deletion logs a warning and the document portal manages its
 lifetime.
@@ -415,8 +497,11 @@ calls `dpkg-deb`.
 
 ```text
 dist/snipunix_0.4.0_amd64.deb
-Depends:    libgtk-4-1, libadwaita-1-0, xdg-desktop-portal
-Recommends: xdg-desktop-portal-gnome
+Depends:    libgtk-4-1, libadwaita-1-0, xdg-desktop-portal,
+            libgstreamer1.0-0, gstreamer1.0-plugins-base,
+            gstreamer1.0-plugins-good, gstreamer1.0-plugins-ugly,
+            gstreamer1.0-libav
+Recommends: xdg-desktop-portal-gnome, gstreamer1.0-pulseaudio
 Models:     /usr/share/snipunix/models
 ```
 
@@ -425,8 +510,8 @@ Models:     /usr/share/snipunix/models
 ```text
 crates/snipunix-core      Geometry, monitor layout, coordinate mapping,
                           selection state machine, RGBA crop
-crates/snipunix-capture   Portal screenshot backend, URI handling, PNG decode,
-                          portal probe
+crates/snipunix-capture   Portal screenshot backend, ScreenCast session,
+                          URI handling, PNG decode, portal probe
 crates/snipunix-annotate  Document model, geometry, undo history, view
                           transform, shared renderer, redaction, PNG/JPEG/WebP
 crates/snipunix-settings  Settings model, XDG path, TOML, clamping, atomic save
@@ -434,9 +519,11 @@ crates/snipunix-ocr       ocrs/rten pipeline, text/box model, PII detection,
                           model discovery, verified download, pixel redaction
 crates/snipunix-overlay   GDK monitor discovery, fullscreen overlay windows,
                           GSK renderer, handles, magnifier, countdown
+crates/snipunix-record    GStreamer pipeline, encoder probe, region crop,
+                          pause/resume probes, MP4/Matroska finalisation
 crates/snipunix-app       CLI, libadwaita shell, preview bar, clipboard,
                           annotation editor, OCR dialog, settings UI,
-                          onboarding, shortcuts, tray
+                          recording UI, onboarding, shortcuts, tray
 data/                     Desktop entry, AppStream metadata, icon
 flatpak/                  Manifest and Cargo source generator
 packaging/                Reproducible deb builder
@@ -455,7 +542,25 @@ docs/                     Architecture, dependencies, test evidence
 - Monitor hotplug cancels the overlay in code, but hotplug could not be
   triggered for evidence.
 - Window mode (snap-to-content) is not implemented; Snipunix supports region
-  and screen capture only.
+  and screen capture, plus monitor and region recording.
+- **Recording was validated with software x264 only.** `vah264enc` was not
+  available on the test host, so the hardware path is preference-ordered but
+  unmeasured. Software 1080p30 used about 32 % of total CPU on an 8-thread
+  i7-8650U.
+- **Microphone and system audio were not validated end to end.** No capture
+  source was available on the test host; the AAC branches are unit-tested only.
+- The pipeline does not use `h264parse` (it ships in `gstreamer1.0-plugins-bad`).
+  It relies on `video/x-h264,stream-format=avc,alignment=au` caps instead.
+- GUI region recording compiles and reuses the capture overlay, but only CLI
+  region recording was exercised end to end.
+- The recording indicator is a separate window and appears in full-screen
+  recordings.
+- A force-killed recording process cannot finalise the MP4/Matroska container.
+  Normal Stop and Cancel paths are safe.
+- Recording and capture were not validated on multi-monitor, mixed-DPI, 4K, or
+  60 fps setups.
+- `flatpak/cargo-sources.json` must be regenerated after `Cargo.lock` changes
+  before packaging.
 - The countdown is shown on the primary monitor only.
 - The clipboard is owned by the process. Quitting Snipunix releases the
   clipboard; closing the window only hides it.
@@ -485,7 +590,7 @@ docs/                     Architecture, dependencies, test evidence
   than an automated end-to-end click path. See the test evidence for details.
 - The Flatpak and deb were validated on this host only. The deb was inspected
   from a staging root, not installed into the live system.
-- X11 is only a fallback socket in the manifest. M3 was tested on Wayland; X11
+- X11 is only a fallback socket in the manifest. M5 was tested on Wayland; X11
   interaction was not validated on a real session.
 - WebP export is lossless because `image 0.25.10` only exposes the lossless
   WebP encoder; there is no WebP quality control.
@@ -498,6 +603,8 @@ docs/                     Architecture, dependencies, test evidence
 
 ## Documentation
 
+- [M5 implementation plan](docs/M5_IMPLEMENTATION_PLAN.md)
+- [M5 test evidence](docs/M5_TEST_EVIDENCE.md)
 - [M3 architecture](docs/M3_ARCHITECTURE.md)
 - [M3 implementation plan](docs/M3_IMPLEMENTATION_PLAN.md)
 - [M3 test evidence](docs/M3_TEST_EVIDENCE.md)

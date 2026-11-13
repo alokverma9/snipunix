@@ -8,10 +8,18 @@ mod settings_ui;
 mod shortcuts;
 mod tray;
 
+use std::os::fd::AsRawFd;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use snipunix_capture::{AutoCapture, CaptureBackend, CaptureOptions};
+use snipunix_capture::{
+    AutoCapture, CaptureBackend, CaptureOptions, ScreencastOptions, screencast,
+};
+use snipunix_record::{AudioOptions, PipeWireStream, RecordOptions, Recorder, VideoSource};
 use tracing_subscriber::EnvFilter;
 
 fn main() -> ExitCode {
@@ -63,6 +71,21 @@ fn real_main() -> Result<ExitCode> {
             }
             if cli.diagnostics {
                 print_diagnostics(&cli)?;
+                return Ok(ExitCode::SUCCESS);
+            }
+            if cli.record_selftest {
+                run_record_selftest()?;
+                return Ok(ExitCode::SUCCESS);
+            }
+
+            // Recording has its own headless path and does not initialise GTK.
+            if let Some(target) = cli.record {
+                let output = cli
+                    .record_output
+                    .clone()
+                    .or_else(|| cli.output.clone())
+                    .unwrap_or_else(default_recording_path);
+                record_to_file(&cli, target, &output)?;
                 return Ok(ExitCode::SUCCESS);
             }
 
@@ -118,6 +141,198 @@ fn capture_to_file(
     Ok(())
 }
 
+fn default_recording_path() -> PathBuf {
+    let settings = snipunix_settings::Settings::load(&snipunix_settings::Settings::default_path())
+        .unwrap_or_default();
+    let stamp = glib::DateTime::now_local()
+        .ok()
+        .and_then(|date| date.format("%Y-%m-%d_%H-%M-%S").ok())
+        .map_or_else(|| "recording".to_string(), |value| value.to_string());
+    settings
+        .recording_directory()
+        .join(format!("Recording_{stamp}.mp4"))
+}
+
+fn record_to_file(cli: &cli::Cli, target: cli::CaptureTarget, output: &Path) -> Result<()> {
+    if target == cli::CaptureTarget::Window {
+        anyhow::bail!("--record window is not supported; use screen or region");
+    }
+    let settings = snipunix_settings::Settings::load(&snipunix_settings::Settings::default_path())
+        .unwrap_or_default();
+    let crop = if target == cli::CaptureTarget::Region {
+        Some(cli.record_region.ok_or_else(|| {
+            anyhow::anyhow!("--record region requires --record-region X,Y,W,H in the headless path")
+        })?)
+    } else {
+        None
+    };
+
+    let include_cursor = !cli.record_no_cursor && settings.recording.include_cursor;
+    let audio = cli
+        .record_audio
+        .map(cli::RecordAudio::options)
+        .unwrap_or(AudioOptions {
+            microphone: settings.recording.microphone,
+            system: settings.recording.system_audio,
+        });
+    let fps = cli.record_fps.unwrap_or(settings.recording.fps);
+
+    async_io::block_on(screencast::register_host_identity(app::APP_ID));
+    let session = async_io::block_on(screencast::open(
+        ScreencastOptions::recording(include_cursor, settings.recording.restore_token.clone()),
+        screencast::DEFAULT_SCREENCAST_TIMEOUT,
+    ))
+    .map_err(|error| anyhow::anyhow!(error))
+    .context("could not start a ScreenCast session")?;
+
+    let stream = session
+        .primary_stream()
+        .ok_or_else(|| anyhow::anyhow!("the ScreenCast portal returned no stream"))?;
+    let source = VideoSource::PipeWire(PipeWireStream {
+        fd: session.pipewire_fd().as_raw_fd(),
+        node_id: stream.node_id,
+        serial: stream.serial,
+        logical_size: stream.logical_size,
+    });
+
+    let mut recorder = Recorder::start(
+        source,
+        RecordOptions {
+            output: output.to_path_buf(),
+            fps,
+            bitrate_kbps: settings.recording.bitrate_kbps,
+            crop,
+            audio,
+        },
+    )
+    .map_err(|error| anyhow::anyhow!(error))
+    .context("could not start recording")?;
+
+    if let Some(token) = session.restore_token() {
+        if settings.recording.restore_token.as_deref() != Some(token) {
+            let mut updated = settings.clone();
+            updated.recording.restore_token = Some(token.to_string());
+            if let Err(error) = updated.save(&snipunix_settings::Settings::default_path()) {
+                tracing::warn!(%error, "could not persist the ScreenCast restore token");
+            }
+        }
+    }
+
+    let (width, height) = recorder.dimensions();
+    if cli.record_duration == 0 {
+        eprintln!(
+            "Recording {width}x{height} at {fps} fps with {}. Press Ctrl+C to stop.",
+            recorder.encoder().label()
+        );
+    } else {
+        eprintln!(
+            "Recording {width}x{height} at {fps} fps with {} for {} s.",
+            recorder.encoder().label(),
+            cli.record_duration
+        );
+    }
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_flag = Arc::clone(&stop);
+    ctrlc::set_handler(move || stop_flag.store(true, Ordering::SeqCst))
+        .context("could not install the stop handler")?;
+
+    let limit = Duration::from_secs(u64::from(cli.record_duration));
+    loop {
+        if stop.load(Ordering::SeqCst) || (cli.record_duration > 0 && recorder.elapsed() >= limit) {
+            break;
+        }
+        if let Some(error) = recorder.take_error() {
+            recorder.cancel();
+            async_io::block_on(session.close());
+            return Err(anyhow::anyhow!(error)).context("recording failed");
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+
+    let file = match recorder.stop() {
+        Ok(file) => file,
+        Err(error) => {
+            async_io::block_on(session.close());
+            return Err(anyhow::anyhow!(error)).context("could not finalise the recording");
+        }
+    };
+    async_io::block_on(session.close());
+
+    println!(
+        "Wrote {} ({:.1} s, {} bytes, {}x{}, {}{})",
+        file.path.display(),
+        file.duration.as_secs_f64(),
+        file.bytes,
+        file.width,
+        file.height,
+        file.encoder.label(),
+        if file.has_audio { ", audio" } else { "" },
+    );
+    Ok(())
+}
+
+fn run_record_selftest() -> Result<()> {
+    snipunix_record::init().map_err(|error| anyhow::anyhow!(error))?;
+    let support = snipunix_record::encoder_support();
+    println!("GStreamer: {}", snipunix_record::version());
+    if support.available.is_empty() {
+        anyhow::bail!(
+            "no H.264 encoder is installed; install gstreamer1.0-plugins-ugly or \
+             gstreamer1.0-vaapi"
+        );
+    }
+    println!(
+        "Encoders: {}",
+        support
+            .available
+            .iter()
+            .map(|encoder| encoder.label())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    let requested_output = std::env::var_os("SNIPUNIX_SELFTEST_OUTPUT").map(PathBuf::from);
+    let output = requested_output.clone().unwrap_or_else(|| {
+        std::env::temp_dir().join(format!(
+            "snipunix-record-selftest-{}.mp4",
+            std::process::id()
+        ))
+    });
+    let started = Instant::now();
+    let recorder = Recorder::start(
+        VideoSource::TestPattern {
+            width: 640,
+            height: 360,
+        },
+        RecordOptions {
+            fps: 30,
+            bitrate_kbps: 2000,
+            ..RecordOptions::new(&output)
+        },
+    )
+    .map_err(|error| anyhow::anyhow!(error))
+    .context("recording self-test failed to start")?;
+    std::thread::sleep(Duration::from_secs(2));
+    let file = recorder
+        .stop()
+        .map_err(|error| anyhow::anyhow!(error))
+        .context("recording self-test failed to finalise")?;
+    println!(
+        "Self-test wrote {} bytes ({}x{}, {:?}, {}) in {:.2} s",
+        file.bytes,
+        file.width,
+        file.height,
+        file.encoder,
+        file.path.display(),
+        started.elapsed().as_secs_f64()
+    );
+    if requested_output.is_none() {
+        std::fs::remove_file(&output).ok();
+    }
+    Ok(())
+}
+
 /// Builds a diagnostics report from environment and backend state. It never
 /// reads screenshots, OCR text, clipboard content, or user documents.
 fn print_diagnostics(cli: &cli::Cli) -> Result<()> {
@@ -141,6 +356,19 @@ fn print_diagnostics(cli: &cli::Cli) -> Result<()> {
         if let Ok(value) = std::env::var(key) {
             out.push_str(&format!("{key}: {value}\n"));
         }
+    }
+    match std::env::var("XDG_SESSION_TYPE").as_deref() {
+        Ok("wayland") if std::env::var_os("WAYLAND_DISPLAY").is_some() => {
+            out.push_str("session: Wayland desktop\n");
+        }
+        Ok("wayland") => out.push_str(
+            "warning: XDG_SESSION_TYPE=wayland but WAYLAND_DISPLAY is unset; \
+             the desktop Wayland socket is unavailable and DISPLAY may be a \
+             test or nested server\n",
+        ),
+        Ok("x11") => out.push_str("session: X11 desktop\n"),
+        Ok(other) if !other.is_empty() => out.push_str(&format!("session: {other}\n")),
+        _ => {}
     }
     if let Ok(release) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
         out.push_str(&format!("kernel: {}\n", release.trim()));
@@ -172,6 +400,55 @@ fn print_diagnostics(cli: &cli::Cli) -> Result<()> {
         Err(error) => out.push_str(&format!("screenshot portal: unavailable ({error})\n")),
     }
 
+    match async_io::block_on(snipunix_capture::probe_screencast()) {
+        Ok(info) => {
+            out.push_str(&format!("screencast portal: version {}\n", info.version));
+            out.push_str(&format!(
+                "screencast sources: {:#x}\n",
+                info.source_types.bits()
+            ));
+            out.push_str(&format!(
+                "screencast cursor modes: {:#x}\n",
+                info.cursor_modes.bits()
+            ));
+        }
+        Err(error) => out.push_str(&format!("screencast portal: unavailable ({error})\n")),
+    }
+
+    match snipunix_record::init() {
+        Ok(()) => {
+            let support = snipunix_record::encoder_support();
+            out.push_str(&format!("gstreamer: {}\n", snipunix_record::version()));
+            let encoders = support
+                .available
+                .iter()
+                .map(|encoder| encoder.label())
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!(
+                "gstreamer encoders: {}\n",
+                if encoders.is_empty() {
+                    "none"
+                } else {
+                    &encoders
+                }
+            ));
+            match support.preferred {
+                Some(encoder) => out.push_str(&format!(
+                    "gstreamer preferred encoder: {}{}\n",
+                    encoder.label(),
+                    if encoder.is_hardware() {
+                        " (hardware)"
+                    } else {
+                        ""
+                    }
+                )),
+                None => out.push_str("gstreamer preferred encoder: none\n"),
+            }
+        }
+        Err(error) => out.push_str(&format!("gstreamer: unavailable ({error})\n")),
+    }
+
     if std::env::var_os("DISPLAY").is_some() {
         match snipunix_capture::X11Capture::new().diagnostics() {
             Ok(report) => out.push_str(&report),
@@ -198,6 +475,19 @@ fn print_diagnostics(cli: &cli::Cli) -> Result<()> {
         settings.capture.delay,
         settings.capture.include_cursor,
         settings.capture.copy_after_capture,
+    ));
+    out.push_str(&format!(
+        "recording: fps={} bitrate={}kbps cursor={} mic={} system={} restore-token={}\n",
+        settings.recording.fps,
+        settings.recording.bitrate_kbps,
+        settings.recording.include_cursor,
+        settings.recording.microphone,
+        settings.recording.system_audio,
+        if settings.recording.restore_token.is_some() {
+            "present"
+        } else {
+            "none"
+        },
     ));
     match snipunix_ocr::ModelPaths::discover(settings.ocr.model_directory.clone().as_deref()) {
         Ok(paths) => out.push_str(&format!(

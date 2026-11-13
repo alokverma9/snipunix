@@ -8,12 +8,16 @@
 
 pub mod image;
 pub mod portal;
+pub mod screencast;
 pub mod uri;
 pub mod x11;
 pub mod x11_hotkey;
 
 pub use image::{CapturedImage, ImageError, decode_image};
 pub use portal::{CaptureError, PortalInfo, PortalScreenshot, probe_portal};
+pub use screencast::{
+    CastStream, ScreencastInfo, ScreencastOptions, ScreencastSession, probe_screencast,
+};
 pub use uri::{PortalFile, portal_uri_to_file};
 pub use x11::{PixelMonitor, X11Capture, X11Window};
 

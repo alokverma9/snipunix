@@ -6,7 +6,10 @@ new direct dependencies. M2 adds the CPU rasteriser (`tiny-skia`) and the text
 stack (`cosmic-text` with `swash`/`fontdb`), and enables the `image` JPEG and
 WebP features. M3 adds settings serialization (`serde`, `toml`), model
 verification and download (`sha2`, `ureq`), the on-device OCR engine
-(`ocrs`/`rten`/`rten-imageproc`), and the tray (`ksni`).
+(`ocrs`/`rten`/`rten-imageproc`), and the tray (`ksni`). M5 adds the GStreamer
+bindings (`gstreamer`), a Ctrl+C handler for headless recordings (`ctrlc`), and
+the `snipunix-record` workspace crate. The `ashpd` `screencast` feature enables
+the PipeWire ScreenCast portal client.
 
 The OCR path and tray are pure Rust. `ureq` is only used by the explicit
 `--download-ocr-models` path and brings an HTTP/TLS stack; it is not used during
@@ -22,7 +25,9 @@ host/runtime fonts and adds no build dependency.
 | `glib` | 0.22.10 | MIT | GLib types, main-loop integration, markup escaping |
 | `gio` | 0.22.10 | MIT | `GApplication` actions and menus; monitor-list signals |
 | `libadwaita` | 0.9.2 | MIT (Rust bindings) | GNOME shell widgets; the libadwaita library itself is LGPL-2.1-or-later |
-| `ashpd` | 0.14.0 | MIT | Screenshot and GlobalShortcuts portal clients |
+| `ashpd` | 0.14.0 | MIT | Screenshot, ScreenCast, and GlobalShortcuts portal clients |
+| `gstreamer` | 0.24.5 | MIT | In-process PipeWire consumption, H.264 encoding, MP4/Matroska muxing |
+| `ctrlc` | 3.5.2 | MIT OR Apache-2.0 | Ctrl+C stop for headless recordings |
 | `image` | 0.25.10 | MIT OR Apache-2.0 | PNG/JPEG decode and PNG/JPEG/WebP encode |
 | `tiny-skia` | 0.12.0 | BSD-3-Clause | CPU vector rasteriser for annotations and export |
 | `cosmic-text` | 0.19.0 | MIT OR Apache-2.0 | Multiline text shaping and layout |
@@ -52,28 +57,34 @@ stack. `tiny-skia` brings `tiny-skia-path` (BSD-3-Clause). `image` brings the
 TLS stack (`rustls`, `native-tls`, `webpki-roots`). `ksni`'s `Unlicense` is a
 public-domain dedication with no attribution requirement.
 
-The seven workspace crates (`snipunix-core`, `snipunix-capture`,
+The eight workspace crates (`snipunix-core`, `snipunix-capture`,
 `snipunix-annotate`, `snipunix-settings`, `snipunix-ocr`, `snipunix-overlay`,
-`snipunix-app`) are GPL-3.0-or-later.
+`snipunix-record`, `snipunix-app`) are GPL-3.0-or-later.
+
+GStreamer itself is a system library (LGPL-2.1-or-later) linked through the MIT
+`gstreamer` bindings. The recording engine uses the GStreamer core, base, good,
+ugly (x264), libav, and PulseAudio plugin sets at runtime; these are not
+vendored into this repository. `snipunix-record` links only to the GStreamer
+API, not to the plugin code.
 
 ## Transitive licenses
 
-`cargo metadata --format-version 1 --locked` reports 307 packages in the M3
-graph (M2: 221). License expressions across the full graph:
+`cargo metadata --format-version 1 --locked` reports 332 packages in the M5
+graph (M3: 307). License expressions across the full graph:
 
 | Count | License expression |
 | --- | --- |
-| 149 | MIT OR Apache-2.0 |
-| 66 | MIT |
+| 157 | MIT OR Apache-2.0 |
+| 78 | MIT |
 | 30 | Apache-2.0 OR MIT |
 | 18 | Unicode-3.0 |
-| 7 | GPL-3.0-or-later (this workspace) |
+| 8 | GPL-3.0-or-later (this workspace) |
+| 5 | MIT/Apache-2.0 |
+| 4 | Zlib OR Apache-2.0 OR MIT |
 | 3 | Unlicense OR MIT |
-| 3 | Zlib OR Apache-2.0 OR MIT |
+| 3 | Apache-2.0 |
 | 3 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
-| 3 | MIT/Apache-2.0 |
 | 3 | BSD-3-Clause |
-| 2 | Apache-2.0 |
 | 2 | MIT OR Zlib OR Apache-2.0 |
 | 2 | BSD-3-Clause OR Apache-2.0 |
 | 2 | ISC |
@@ -98,6 +109,11 @@ The manifest targets:
 
 These are distribution-provided runtime components, not vendored into this
 repository. Their licenses are documented by their upstream projects.
+
+`org.gnome.Platform//50` ships the GStreamer runtime and the x264/libav plugins
+used by recording. The manifest adds `--socket=pulseaudio` for microphone and
+system-audio capture and `--filesystem=xdg-videos` for the default recording
+folder.
 
 ## Regenerating the Flatpak source list
 

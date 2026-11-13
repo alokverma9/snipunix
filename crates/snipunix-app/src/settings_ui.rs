@@ -48,6 +48,7 @@ pub fn present(
     dialog.add(&capture_page(&context));
     dialog.add(&shortcut_page(&context));
     dialog.add(&files_page(&context));
+    dialog.add(&recording_page(&context));
     dialog.add(&ocr_page(&context));
     dialog.add(&appearance_page(&context));
     dialog.add(&about_page());
@@ -380,6 +381,162 @@ fn files_page(context: &Context) -> adw::PreferencesPage {
     group.add(&quality);
 
     page.add(&group);
+    page
+}
+
+fn recording_page(context: &Context) -> adw::PreferencesPage {
+    let settings = context.settings.borrow().clone();
+    let page = adw::PreferencesPage::builder()
+        .title("Recording")
+        .icon_name("media-record-symbolic")
+        .build();
+
+    let output_group = adw::PreferencesGroup::builder()
+        .title("Output")
+        .description("Recordings are written as H.264 MP4 files.")
+        .build();
+    let directory = adw::ActionRow::builder()
+        .title("Recording folder")
+        .subtitle(settings.recording_directory().display().to_string())
+        .build();
+    let choose = gtk::Button::with_label("Choose…");
+    let context_choose = context.clone_handle();
+    let directory_row = directory.clone();
+    choose.connect_clicked(move |_| {
+        choose_folder(
+            &context_choose.window,
+            Some(context_choose.settings.borrow().recording_directory()),
+            {
+                let context = context_choose.clone_handle();
+                let directory_row = directory_row.clone();
+                move |path| {
+                    directory_row.set_subtitle(&path.display().to_string());
+                    context.update(|settings| settings.recording.directory = Some(path.clone()));
+                }
+            },
+        );
+    });
+    directory.add_suffix(&choose);
+    directory.set_activatable_widget(Some(&choose));
+    output_group.add(&directory);
+    page.add(&output_group);
+
+    let video_group = adw::PreferencesGroup::builder()
+        .title("Video")
+        .description("Frame rate and bitrate apply to the next recording.")
+        .build();
+    let fps = adw::SpinRow::builder()
+        .title("Frame rate")
+        .subtitle("Frames per second (10–60)")
+        .adjustment(&gtk::Adjustment::new(
+            f64::from(settings.recording.fps),
+            f64::from(snipunix_record::MIN_FPS),
+            f64::from(snipunix_record::MAX_FPS),
+            1.0,
+            5.0,
+            0.0,
+        ))
+        .digits(0)
+        .snap_to_ticks(true)
+        .build();
+    let context_fps = context.clone_handle();
+    fps.connect_value_notify(move |row| {
+        let value = row.value().round() as u32;
+        context_fps.update(|settings| settings.recording.fps = value);
+    });
+    video_group.add(&fps);
+
+    let bitrate = adw::SpinRow::builder()
+        .title("Bitrate")
+        .subtitle("Kilobits per second (500–50000)")
+        .adjustment(&gtk::Adjustment::new(
+            f64::from(settings.recording.bitrate_kbps),
+            f64::from(snipunix_record::MIN_BITRATE_KBPS),
+            f64::from(snipunix_record::MAX_BITRATE_KBPS),
+            500.0,
+            2000.0,
+            0.0,
+        ))
+        .digits(0)
+        .snap_to_ticks(true)
+        .build();
+    let context_bitrate = context.clone_handle();
+    bitrate.connect_value_notify(move |row| {
+        let value = row.value().round() as u32;
+        context_bitrate.update(|settings| settings.recording.bitrate_kbps = value);
+    });
+    video_group.add(&bitrate);
+
+    let cursor = adw::SwitchRow::builder()
+        .title("Include the pointer")
+        .subtitle("Ask the compositor to draw the cursor into the recording")
+        .active(settings.recording.include_cursor)
+        .build();
+    let context_cursor = context.clone_handle();
+    cursor.connect_active_notify(move |row| {
+        context_cursor.update(|settings| settings.recording.include_cursor = row.is_active());
+    });
+    video_group.add(&cursor);
+    page.add(&video_group);
+
+    let audio_group = adw::PreferencesGroup::builder()
+        .title("Audio")
+        .description(
+            "Both sources are off by default. Each one is recorded separately and \
+             mixed into the MP4.",
+        )
+        .build();
+    let microphone = adw::SwitchRow::builder()
+        .title("Microphone")
+        .subtitle("Record the default microphone")
+        .active(settings.recording.microphone)
+        .build();
+    let context_microphone = context.clone_handle();
+    microphone.connect_active_notify(move |row| {
+        context_microphone.update(|settings| settings.recording.microphone = row.is_active());
+    });
+    audio_group.add(&microphone);
+
+    let system = adw::SwitchRow::builder()
+        .title("System audio")
+        .subtitle("Record the default output monitor (what you hear)")
+        .active(settings.recording.system_audio)
+        .build();
+    let context_system = context.clone_handle();
+    system.connect_active_notify(move |row| {
+        context_system.update(|settings| settings.recording.system_audio = row.is_active());
+    });
+    audio_group.add(&system);
+    page.add(&audio_group);
+
+    let permission_group = adw::PreferencesGroup::builder()
+        .title("ScreenCast permission")
+        .description(
+            "Snipunix remembers the source you last allowed. Reset it to see the \
+             desktop picker again on the next recording.",
+        )
+        .build();
+    let reset = adw::ActionRow::builder()
+        .title("Forget remembered source")
+        .subtitle(if settings.recording.restore_token.is_some() {
+            "A source is currently remembered"
+        } else {
+            "No source is remembered"
+        })
+        .build();
+    let reset_button = gtk::Button::with_label("Reset");
+    reset_button.set_valign(gtk::Align::Center);
+    let context_reset = context.clone_handle();
+    let reset_row = reset.clone();
+    reset_button.connect_clicked(move |_| {
+        reset_row.set_subtitle("No source is remembered");
+        context_reset.update(|settings| settings.recording.restore_token = None);
+    });
+    reset.add_suffix(&reset_button);
+    reset.set_activatable_widget(Some(&reset_button));
+    permission_group.add(&reset);
+    page.add(&permission_group);
+
     page
 }
 

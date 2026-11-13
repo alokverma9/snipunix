@@ -93,7 +93,7 @@ impl CaptureBackend for PortalScreenshot {
     }
 }
 
-fn map_error(error: AshpdError) -> CaptureError {
+pub(crate) fn map_error(error: AshpdError) -> CaptureError {
     match error {
         AshpdError::Response(ashpd::desktop::ResponseError::Cancelled) => CaptureError::Cancelled,
         AshpdError::Response(ashpd::desktop::ResponseError::Other) => {
