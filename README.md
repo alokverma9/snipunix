@@ -19,6 +19,165 @@ user-initiated OCR model download for host builds that do not already have the
 models installed. The promise is checked by a test and by a packet capture; see
 [docs/PRIVACY.md](docs/PRIVACY.md).
 
+## Download and install
+
+There are no hosted prebuilt binaries. Snipunix is built from source on your
+machine by one of three paths, and every path keeps everything on the device:
+
+| You want | Choose |
+| --- | --- |
+| To download and install a prebuilt deb, no git clone | [Fastest install](#fastest-install-ubuntudebian) |
+| A normal installed app on Ubuntu/Debian | [Option A: deb package](#option-a-deb-package-ubuntudebian) |
+| A sandboxed app with bundled models and runtime | [Option B: Flatpak](#option-b-flatpak) |
+| To run straight from the source tree | [Option C: run from source](#option-c-run-from-source) |
+
+### Fastest install (Ubuntu/Debian)
+
+If you just want the tool and nothing else:
+
+```sh
+curl -LO https://github.com/alokverma9/snipunix/releases/latest/download/snipunix_0.6.0_amd64.deb
+sudo apt install ./snipunix_0.6.0_amd64.deb
+```
+
+Then launch Snipunix from the app grid. Details and other install methods are
+below.
+
+### Step 1 — Install the prerequisites
+
+Snipunix needs Rust 1.85 or newer plus GTK 4, libadwaita, and GStreamer
+development files. On Ubuntu/Debian:
+
+Install Rust with `rustup` (distribution Rust is often older than 1.85):
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+rustc --version   # must print 1.85.0 or newer
+```
+
+Install the build and runtime dependencies:
+
+```sh
+sudo apt install build-essential git pkg-config libgtk-4-dev libadwaita-1-dev \
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav \
+    gstreamer1.0-pulseaudio \
+    xdg-desktop-portal xdg-desktop-portal-gnome
+```
+
+Other distributions need the equivalents: `gtk4-devel`,
+`libadwaita-devel`, `gstreamer1.0-devel` and the base/good/ugly/libav/pulse
+plugin packages, `xdg-desktop-portal`, and a working C toolchain.
+
+`x264enc` (from `gstreamer1.0-plugins-ugly`) is the software H.264 encoder used
+when VAAPI is unavailable. `snipunix --diagnostics` prints the GStreamer version
+and the encoders it can find.
+
+### Step 2 — Get the source (only needed for Option B, C, or building Option A yourself)
+
+If you only want to install the prebuilt deb (Option A), skip to Step 3.
+
+```sh
+git clone https://github.com/alokverma9/snipunix.git
+cd snipunix
+```
+
+### Step 3 — Install with one of the options below
+
+#### Option A: deb package (Ubuntu/Debian)
+
+**Download the prebuilt package** (no source checkout needed):
+
+```sh
+curl -LO https://github.com/alokverma9/snipunix/releases/latest/download/snipunix_0.6.0_amd64.deb
+sudo apt install ./snipunix_0.6.0_amd64.deb
+```
+
+`apt` installs the package together with its runtime dependencies, verifies
+checksums from the repository metadata, and the OCR models, desktop entry, icon,
+and translations are all inside the package. After installation, launch
+**Snipunix** from the app grid, or run:
+
+```sh
+snipunix
+```
+
+The file is also available on the
+[Releases page](https://github.com/alokverma9/snipunix/releases), where you can
+pick a specific version.
+
+**Or build it yourself** from the cloned source (see Step 2), which produces the
+identical package:
+
+```sh
+packaging/build-deb.sh
+sudo apt install ./dist/snipunix_0.6.0_amd64.deb
+```
+
+The build script downloads and verifies the OCR models itself, so no extra step
+is needed.
+
+#### Option B: Flatpak
+
+The Flatpak bundles the GNOME runtime (including GStreamer and x264) and the
+OCR models, so nothing else is required after the SDK download:
+
+```sh
+flatpak remote-add --user --if-not-exists flathub \
+    https://flathub.org/repo/flathub.flatpakrepo
+
+flatpak install --user flathub \
+    org.gnome.Platform//50 \
+    org.gnome.Sdk//50 \
+    org.freedesktop.Sdk.Extension.rust-stable//25.08
+
+python3 flatpak/generate-cargo-sources.py Cargo.lock \
+    -o flatpak/cargo-sources.json
+
+flatpak-builder --user --install --force-clean --disable-rofiles-fuse \
+    build-flatpak flatpak/io.github.alokverma9.snipunix.json
+
+flatpak run io.github.alokverma9.snipunix
+```
+
+#### Option C: run from source
+
+```sh
+cargo build --release --locked --bin snipunix
+./target/release/snipunix
+```
+
+A source build has no bundled OCR models. Download them once, into a directory
+the app searches:
+
+```sh
+./target/release/snipunix --download-ocr-models \
+    --ocr-models "$HOME/.local/share/snipunix/models"
+```
+
+Test that capture works before opening the GUI:
+
+```sh
+./target/release/snipunix --capture screen --output /tmp/snipunix-screen.png
+```
+
+### Step 4 — First launch
+
+1. Start Snipunix. A welcome dialog explains the Screenshot portal, offers to
+   register global shortcuts, and lets you pick a save folder.
+2. The first capture shows a desktop permission dialog; approve it. The
+   decision is also visible later under **Settings → Privacy → Screenshots**.
+3. For global shortcuts on GNOME, a host build needs its desktop entry
+   installed and the binary in `PATH`; see
+   [Global shortcuts](#global-shortcuts). Inside the Flatpak this is handled by
+   the sandbox.
+4. Check `snipunix --diagnostics` if anything fails; it reports the portal,
+   GStreamer, and encoder state.
+
+To update later, `git pull` in the repository and repeat Step 3 (the Flatpak
+path regenerates `flatpak/cargo-sources.json` first when `Cargo.lock` changed).
+
 ## Status
 
 | Area | M6 state |
@@ -64,15 +223,8 @@ any behaviour.
 - Flatpak and `flatpak-builder` only for the Flatpak build
 - `dpkg-deb` only for the deb build
 
-On Ubuntu:
-
-```sh
-sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev \
-    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-    gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav \
-    gstreamer1.0-pulseaudio \
-    xdg-desktop-portal xdg-desktop-portal-gnome flatpak flatpak-builder
-```
+The exact install commands for Ubuntu/Debian are in
+[Step 1 of Download and install](#step-1--install-the-prerequisites).
 
 `x264enc` (from `gstreamer1.0-plugins-ugly`) is the software H.264 encoder used
 when VAAPI is unavailable. `snipunix --diagnostics` prints the GStreamer version
@@ -486,6 +638,10 @@ best-effort; a failure is logged and never blocks the capture.
 
 ## Packaging
 
+For most users, [Download and install](#download-and-install) above already
+covers building the deb and Flatpak. This section is for packagers and
+maintainers.
+
 ### Flatpak
 
 The manifest is `flatpak/io.github.alokverma9.snipunix.json`. It has two modules:
@@ -577,7 +733,7 @@ binary, desktop entry, metainfo, icon, copyright, and both model files, then
 calls `dpkg-deb`.
 
 ```text
-dist/snipunix_0.4.0_amd64.deb
+dist/snipunix_0.6.0_amd64.deb
 Depends:    libgtk-4-1, libadwaita-1-0, xdg-desktop-portal,
             libgstreamer1.0-0, gstreamer1.0-plugins-base,
             gstreamer1.0-plugins-good, gstreamer1.0-plugins-ugly,
