@@ -47,6 +47,10 @@ install -Dm644 "$models/text-detection.onnx" \
     "$package_root/usr/share/snipunix/models/text-detection.onnx"
 install -Dm644 "$models/text-recognition.onnx" \
     "$package_root/usr/share/snipunix/models/text-recognition.onnx"
+for locale in de es; do
+    install -Dm644 "crates/snipunix-i18n/locales/$locale/LC_MESSAGES/snipunix.mo" \
+        "$package_root/usr/share/locale/$locale/LC_MESSAGES/snipunix.mo"
+done
 install -Dm644 LICENSE "$package_root/usr/share/doc/snipunix/copyright"
 
 mkdir -p "$package_root/DEBIAN"
@@ -64,6 +68,7 @@ Description: Screenshot, annotate, record, and local OCR for GNOME Wayland
  Screenshot portal, records a monitor or region through ScreenCast,
  edits captures non-destructively, and extracts text with on-device
  OCR. Images, recordings, and recognised text never leave the machine.
+ The interface is translated into German and Spanish.
 EOF
 
 mkdir -p dist

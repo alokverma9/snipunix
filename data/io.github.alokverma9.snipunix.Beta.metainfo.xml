@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.alokverma9.snipunix.Beta</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Snipunix (Beta)</name>
+  <summary>Beta build of the Snipunix screenshot tool</summary>
+  <description>
+    <p>
+      This is the beta channel of Snipunix, the GNOME screenshot, annotation,
+      and screen-recording tool. It is installed next to the stable release,
+      keeps its own settings and its own portal permissions, and can be
+      installed side by side with it.
+    </p>
+    <p>
+      The beta exists so that new behaviour can be tried on real machines
+      before it reaches the stable channel. Expect rough edges: the feature
+      set matches the stable release of the moment, but new work lands here
+      first.
+    </p>
+    <p>
+      Everything still happens on your machine. There is no telemetry, nothing
+      is uploaded, and the only network request is an explicit, user-initiated
+      download of the OCR models for host builds.
+    </p>
+    <p>
+      Please report problems in the issue tracker. Attach the diagnostics
+      report from Settings → About, or the output of
+      <code>snipunix --diagnostics</code>. It contains no screen content and no
+      recognised text.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.alokverma9.snipunix.Beta.desktop</launchable>
+  <provides>
+    <binary>snipunix</binary>
+  </provides>
+  <categories>
+    <category>Utility</category>
+    <category>Graphics</category>
+  </categories>
+  <url type="homepage">https://github.com/alokverma9/snipunix</url>
+  <url type="bugtracker">https://github.com/alokverma9/snipunix/issues</url>
+  <developer id="io.github.alokverma9">
+    <name>Snipunix contributors</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.6.0-beta" date="2026-11-17">
+      <description>
+        <p>
+          The first beta of the 0.6 release candidate: translations, the
+          diagnostics export, opt-in crash reports, and the packaging and
+          documentation work.
+        </p>
+      </description>
+    </release>
+  </releases>
+</component>

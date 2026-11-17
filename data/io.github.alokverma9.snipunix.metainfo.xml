@@ -4,7 +4,7 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Snipunix</name>
-  <summary>Screenshot. Annotate. Share.</summary>
+  <summary>Capture, annotate and share your screen</summary>
   <description>
     <p>
       Snipunix captures the screen through the desktop Screenshot portal, lets
@@ -26,14 +26,21 @@
       explicit opt-in for host builds.
     </p>
     <p>
+      Screen recording uses the ScreenCast portal and writes an H.264 file in
+      an MP4 container. You can record a whole monitor or a region, pause and
+      resume, and add the microphone or the system output as audio. The source
+      you allowed is remembered, so the next recording starts straight away.
+    </p>
+    <p>
       Settings and onboarding cover capture defaults, rebindable global
       shortcuts, save folders and formats, local OCR options, and overlay
       appearance. A best-effort tray exposes capture, settings, and quit when
       the desktop provides a StatusNotifierItem host.
     </p>
     <p>
-      Images stay in memory until you save them. Snipunix works locally, does
-      not upload anything, and contains no telemetry.
+      The interface is translated into German and Spanish. Images stay in
+      memory until you save them. Snipunix works locally, does not upload
+      anything, and contains no telemetry.
     </p>
   </description>
   <launchable type="desktop-id">io.github.alokverma9.snipunix.desktop</launchable>
@@ -44,12 +51,77 @@
     <category>Utility</category>
     <category>Graphics</category>
   </categories>
+  <keywords>
+    <keyword>screenshot</keyword>
+    <keyword>capture</keyword>
+    <keyword>snip</keyword>
+    <keyword>annotate</keyword>
+    <keyword>share</keyword>
+    <keyword>ocr</keyword>
+    <keyword>text</keyword>
+    <keyword>redact</keyword>
+    <keyword>record</keyword>
+    <keyword>screen recorder</keyword>
+  </keywords>
   <url type="homepage">https://github.com/alokverma9/snipunix</url>
+  <url type="bugtracker">https://github.com/alokverma9/snipunix/issues</url>
+  <url type="vcs-browser">https://github.com/alokverma9/snipunix</url>
+  <url type="translate">https://github.com/alokverma9/snipunix/tree/main/po</url>
   <developer id="io.github.alokverma9">
     <name>Snipunix contributors</name>
   </developer>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <branding>
+    <color type="primary" scheme_preference="light">#e66000</color>
+    <color type="primary" scheme_preference="dark">#ff9b4a</color>
+  </branding>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/alokverma9/snipunix/main/data/screenshots/01-main-window.png</image>
+      <caption>The Snipunix window</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/alokverma9/snipunix/main/data/screenshots/02-annotation-editor.png</image>
+      <caption>The annotation editor with pen, arrow, rectangle, and ellipse tools</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/alokverma9/snipunix/main/data/screenshots/03-settings.png</image>
+      <caption>Settings for capture, shortcuts, files, recording, text recognition, and appearance</caption>
+    </screenshot>
+  </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.6.0" date="2026-11-17">
+      <description>
+        <p>
+          M6 release candidate: a gettext translation pipeline with German and
+          Spanish catalogues, a local diagnostics report that can be exported
+          from Settings or the command line, opt-in local crash reports that
+          are off by default, criterion benchmarks for the capture and export
+          pipelines, a supply-chain policy checked with cargo-deny and
+          cargo-audit, a verified no-network guarantee, a user guide, a
+          shortcut reference, a platform limitations document, and a privacy
+          statement.
+        </p>
+      </description>
+    </release>
+    <release version="0.5.0" date="2026-11-13">
+      <description>
+        <p>
+          M5: screen recording through the PipeWire ScreenCast portal with
+          H.264 output, region and monitor recording, optional microphone and
+          system audio, a recording window with pause and stop, a persisted
+          source token, and a recording self-test.
+        </p>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-11-09">
       <description>
         <p>

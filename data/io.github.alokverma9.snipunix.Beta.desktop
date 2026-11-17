@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Snipunix (Beta)
+GenericName=Screenshot Tool
+Comment=Beta build of Snipunix — Screenshot. Annotate. Share.
+Exec=snipunix %U
+Icon=io.github.alokverma9.snipunix.Beta
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=screenshot;capture;snip;annotate;share;ocr;text;redact;record;beta;
+StartupNotify=true

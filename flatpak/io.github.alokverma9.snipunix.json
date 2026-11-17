@@ -52,6 +52,7 @@
         "cargo --offline fetch --manifest-path Cargo.toml --verbose",
         "cargo build --offline --release --locked --bin snipunix",
         "install -Dm755 target/release/snipunix ${FLATPAK_DEST}/bin/snipunix",
+        "for locale in de es; do install -Dm644 crates/snipunix-i18n/locales/$locale/LC_MESSAGES/snipunix.mo ${FLATPAK_DEST}/share/locale/$locale/LC_MESSAGES/snipunix.mo; done",
         "install -Dm644 data/io.github.alokverma9.snipunix.desktop ${FLATPAK_DEST}/share/applications/io.github.alokverma9.snipunix.desktop",
         "install -Dm644 data/io.github.alokverma9.snipunix.metainfo.xml ${FLATPAK_DEST}/share/metainfo/io.github.alokverma9.snipunix.metainfo.xml",
         "install -Dm644 data/io.github.alokverma9.snipunix.svg ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/io.github.alokverma9.snipunix.svg"

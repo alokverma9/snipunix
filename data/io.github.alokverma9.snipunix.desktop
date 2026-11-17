@@ -7,5 +7,5 @@ Icon=io.github.alokverma9.snipunix
 Terminal=false
 Type=Application
 Categories=Utility;
-Keywords=screenshot;capture;snip;annotate;share;ocr;text;redact;
+Keywords=screenshot;capture;snip;annotate;share;ocr;text;redact;record;
 StartupNotify=true
