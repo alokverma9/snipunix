@@ -1,0 +1,13 @@
+# Configuration for `cargo audit`.
+#
+# The entries below are unmaintained-crate warnings, not vulnerabilities.
+# Each one is recorded with the reason it is acceptable for this project, so
+# a reviewer can check the reasoning rather than trusting a blanket ignore.
+
+[advisories]
+ignore = [
+    "RUSTSEC-2026-0192", # ttf-parser is unmaintained; used by cosmic-text to read fonts.
+    "RUSTSEC-2026-0370", # zvariant 5 is unmaintained; used by zbus for D-Bus messages.
+    "RUSTSEC-2026-0371", # zbus_names 5 is unmaintained; used by zbus for well-known names.
+    "RUSTSEC-2026-0372", # zvariant_derive 5 is unmaintained; used by zbus for D-Bus messages.
+]

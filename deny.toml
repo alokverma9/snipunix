@@ -1,0 +1,62 @@
+# cargo-deny configuration for Snipunix.
+#
+# The rules below encode the licence policy and the sources that are allowed
+# to end up in a release build. `cargo deny check` is part of the release
+# gate; see docs/SECURITY.md.
+
+[graph]
+all-features = false
+no-default-features = false
+
+# The advisory database and the licence list are fetched on demand.
+[advisories]
+version = 2
+# The following advisories report crates that have been merged into another
+# crate. There is no safe upgrade for the versions the dependency graph
+# requires, and the affected code is not reachable from an untrusted input.
+ignore = [
+    { id = "RUSTSEC-2026-0370", reason = "zvariant 5 is unmaintained but has no known vulnerability; it is only used by zbus for D-Bus messages." },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive 5 is unmaintained but has no known vulnerability; it is only used by zbus for D-Bus messages." },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names 5 is unmaintained but has no known vulnerability; it is only used by zbus for well-known names." },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained but has no known vulnerability; it is used by cosmic-text to read fonts." },
+]
+
+[licenses]
+version = 2
+# The application is GPL-3.0-or-later. Every dependency must be compatible
+# with that.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
+    "GPL-3.0-or-later",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+# These licences are accepted but only for crates that are not distributed
+# with the application, such as build-time dependencies.
+confidence-threshold = 0.9
+
+[bans]
+# Multiple versions of the same crate are tolerated where the dependency
+# graph forces it; the list records the known cases so a new one is noticed.
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = [
+    # A yanked or unpublished crate must never enter a release.
+    { name = "openssl-sys", reason = "The application does not use OpenSSL." },
+]
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# The Flatpak build vendors every crate into `flatpak/cargo-sources.json`.
+allow-git = []
