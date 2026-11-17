@@ -18,5 +18,13 @@ futures-lite.workspace = true
 url.workspace = true
 x11rb.workspace = true
 
+[dev-dependencies]
+criterion.workspace = true
+snipunix-core.workspace = true
+
+[[bench]]
+name = "image_pipeline"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
