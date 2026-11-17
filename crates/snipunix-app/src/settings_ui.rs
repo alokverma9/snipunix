@@ -11,6 +11,7 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use libadwaita as adw;
+use snipunix_i18n::{tr, tr_fmt};
 use snipunix_settings::{CaptureMode, SaveFormat, Settings};
 
 use crate::app::APP_ID;
@@ -34,7 +35,7 @@ pub fn present(
     callbacks: Callbacks,
 ) {
     let dialog = adw::PreferencesDialog::builder()
-        .title("Snipunix Settings")
+        .title(tr!("Snipunix Settings"))
         .search_enabled(true)
         .build();
 
@@ -51,7 +52,7 @@ pub fn present(
     dialog.add(&recording_page(&context));
     dialog.add(&ocr_page(&context));
     dialog.add(&appearance_page(&context));
-    dialog.add(&about_page());
+    dialog.add(&about_page(&context));
     dialog.present(Some(parent));
 }
 
@@ -65,18 +66,23 @@ struct Context {
 fn capture_page(context: &Context) -> adw::PreferencesPage {
     let settings = context.settings.borrow().clone();
     let page = adw::PreferencesPage::builder()
-        .title("Capture")
+        .title(tr!("Capture"))
         .icon_name("camera-photo-symbolic")
         .build();
     let group = adw::PreferencesGroup::builder()
-        .title("Capture defaults")
-        .description("These apply to the Capture Region and Capture Screen actions.")
+        .title(tr!("Capture defaults"))
+        .description(tr!(
+            "These apply to the Capture Region and Capture Screen actions."
+        ))
         .build();
 
     let mode = adw::ComboRow::builder()
-        .title("Default mode")
-        .subtitle("What the tray and global shortcut open")
-        .model(&gtk::StringList::new(&["Select a region", "Full screen"]))
+        .title(tr!("Default mode"))
+        .subtitle(tr!("What the tray and global shortcut open"))
+        .model(&gtk::StringList::new(&[
+            &tr!("Select a region"),
+            &tr!("Full screen"),
+        ]))
         .selected(match settings.capture.default_mode {
             CaptureMode::Region => 0,
             CaptureMode::Screen => 1,
@@ -95,8 +101,8 @@ fn capture_page(context: &Context) -> adw::PreferencesPage {
     group.add(&mode);
 
     let delay = adw::SpinRow::builder()
-        .title("Delay")
-        .subtitle("Seconds to wait before the screen is frozen")
+        .title(tr!("Delay"))
+        .subtitle(tr!("Seconds to wait before the screen is frozen"))
         .adjustment(&gtk::Adjustment::new(
             f64::from(settings.capture.delay),
             0.0,
@@ -118,8 +124,8 @@ fn capture_page(context: &Context) -> adw::PreferencesPage {
     group.add(&delay);
 
     let copy = adw::SwitchRow::builder()
-        .title("Copy after capture")
-        .subtitle("Put the finished screenshot on the clipboard")
+        .title(tr!("Copy after capture"))
+        .subtitle(tr!("Put the finished screenshot on the clipboard"))
         .active(settings.capture.copy_after_capture)
         .build();
     let context_copy = context.clone_handle();
@@ -129,8 +135,10 @@ fn capture_page(context: &Context) -> adw::PreferencesPage {
     group.add(&copy);
 
     let remember = adw::SwitchRow::builder()
-        .title("Remember last region")
-        .subtitle("Pre-fill the selection overlay with the previous rectangle")
+        .title(tr!("Remember last region"))
+        .subtitle(tr!(
+            "Pre-fill the selection overlay with the previous rectangle"
+        ))
         .active(settings.capture.remember_last_region)
         .build();
     let context_remember = context.clone_handle();
@@ -142,8 +150,8 @@ fn capture_page(context: &Context) -> adw::PreferencesPage {
     group.add(&remember);
 
     let cursor = adw::SwitchRow::builder()
-        .title("Include pointer")
-        .subtitle("Draw the mouse pointer into native X11 captures")
+        .title(tr!("Include pointer"))
+        .subtitle(tr!("Draw the mouse pointer into native X11 captures"))
         .active(settings.capture.include_cursor)
         .build();
     let context_cursor = context.clone_handle();
@@ -159,21 +167,23 @@ fn capture_page(context: &Context) -> adw::PreferencesPage {
 fn shortcut_page(context: &Context) -> adw::PreferencesPage {
     let settings = context.settings.borrow().clone();
     let page = adw::PreferencesPage::builder()
-        .title("Shortcuts")
+        .title(tr!("Shortcuts"))
         .icon_name("preferences-desktop-keyboard-shortcuts-symbolic")
         .build();
     let group = adw::PreferencesGroup::builder()
-        .title("Global shortcuts")
-        .description(
+        .title(tr!("Global shortcuts"))
+        .description(tr!(
             "Registration goes through the desktop's GlobalShortcuts portal. \
              The portal may remap a trigger; the triggers shown below are the \
-             ones it actually accepted.",
-        )
+             ones it actually accepted."
+        ))
         .build();
 
     let register = adw::SwitchRow::builder()
-        .title("Register on startup")
-        .subtitle("Ask the portal for global shortcuts whenever Snipunix starts")
+        .title(tr!("Register on startup"))
+        .subtitle(tr!(
+            "Ask the portal for global shortcuts whenever Snipunix starts"
+        ))
         .active(settings.shortcuts.register_on_startup)
         .build();
     let context_register = context.clone_handle();
@@ -185,12 +195,12 @@ fn shortcut_page(context: &Context) -> adw::PreferencesPage {
     group.add(&register);
 
     let region = adw::EntryRow::builder()
-        .title("Region trigger")
+        .title(tr!("Region trigger"))
         .text(settings.shortcuts.region_trigger.clone())
         .build();
-    region.set_tooltip_text(Some(
-        "Portal trigger syntax, for example CTRL+SHIFT+s. Press Enter to apply.",
-    ));
+    region.set_tooltip_text(Some(&tr!(
+        "Portal trigger syntax, for example CTRL+SHIFT+s. Press Enter to apply."
+    )));
     let context_region = context.clone_handle();
     region.connect_apply(move |row| {
         let value = row.text().trim().to_string();
@@ -203,12 +213,12 @@ fn shortcut_page(context: &Context) -> adw::PreferencesPage {
     group.add(&region);
 
     let screen = adw::EntryRow::builder()
-        .title("Screen trigger")
+        .title(tr!("Screen trigger"))
         .text(settings.shortcuts.screen_trigger.clone())
         .build();
-    screen.set_tooltip_text(Some(
-        "Portal trigger syntax, for example CTRL+SHIFT+a. Press Enter to apply.",
-    ));
+    screen.set_tooltip_text(Some(&tr!(
+        "Portal trigger syntax, for example CTRL+SHIFT+a. Press Enter to apply."
+    )));
     let context_screen = context.clone_handle();
     screen.connect_apply(move |row| {
         let value = row.text().trim().to_string();
@@ -221,16 +231,16 @@ fn shortcut_page(context: &Context) -> adw::PreferencesPage {
     group.add(&screen);
 
     let bound = adw::ActionRow::builder()
-        .title("Registered triggers")
+        .title(tr!("Registered triggers"))
         .subtitle(if settings.shortcuts.bound_description.is_empty() {
-            "Not registered yet"
+            tr!("Not registered yet")
         } else {
-            settings.shortcuts.bound_description.as_str()
+            settings.shortcuts.bound_description.clone()
         })
         .subtitle_selectable(true)
         .build();
     bound.set_subtitle_lines(3);
-    let register_button = gtk::Button::with_label("Register Now");
+    let register_button = gtk::Button::with_label(&tr!("Register Now"));
     register_button.add_css_class("suggested-action");
     let callback = Rc::clone(&context.callbacks.register_shortcuts);
     register_button.connect_clicked(move |_| callback());
@@ -240,18 +250,18 @@ fn shortcut_page(context: &Context) -> adw::PreferencesPage {
     page.add(&group);
 
     let help = adw::PreferencesGroup::builder()
-        .title("Troubleshooting")
-        .description(
+        .title(tr!("Troubleshooting"))
+        .description(tr!(
             "If the portal refuses the request, bind a custom shortcut in your \
              desktop's keyboard settings to `snipunix --capture region` and \
-             `snipunix --capture screen`.",
-        )
+             `snipunix --capture screen`."
+        ))
         .build();
     let row = adw::ActionRow::builder()
-        .title("Desktop keyboard settings")
-        .subtitle("Open the system panel to bind a manual shortcut")
+        .title(tr!("Desktop keyboard settings"))
+        .subtitle(tr!("Open the system panel to bind a manual shortcut"))
         .build();
-    let open = gtk::Button::with_label("Open");
+    let open = gtk::Button::with_label(&tr!("Open"));
     let callback = Rc::clone(&context.callbacks.open_keyboard_settings);
     open.connect_clicked(move |_| callback());
     row.add_suffix(&open);
@@ -264,17 +274,19 @@ fn shortcut_page(context: &Context) -> adw::PreferencesPage {
 fn files_page(context: &Context) -> adw::PreferencesPage {
     let settings = context.settings.borrow().clone();
     let page = adw::PreferencesPage::builder()
-        .title("Files")
+        .title(tr!("Files"))
         .icon_name("folder-pictures-symbolic")
         .build();
     let group = adw::PreferencesGroup::builder()
-        .title("Saving")
-        .description("Snipunix never writes a file without a save action or auto-save enabled.")
+        .title(tr!("Saving"))
+        .description(tr!(
+            "Snipunix never writes a file without a save action or auto-save enabled."
+        ))
         .build();
 
     let auto_save = adw::SwitchRow::builder()
-        .title("Auto-save after capture")
-        .subtitle("Write a file as soon as a capture completes")
+        .title(tr!("Auto-save after capture"))
+        .subtitle(tr!("Write a file as soon as a capture completes"))
         .active(settings.files.auto_save)
         .build();
     let context_auto_save = context.clone_handle();
@@ -284,10 +296,10 @@ fn files_page(context: &Context) -> adw::PreferencesPage {
     group.add(&auto_save);
 
     let directory = adw::ActionRow::builder()
-        .title("Save folder")
+        .title(tr!("Save folder"))
         .subtitle(settings.files.directory_or_default().display().to_string())
         .build();
-    let choose = gtk::Button::with_label("Choose…");
+    let choose = gtk::Button::with_label(&tr!("Choose…"));
     let context_choose = context.clone_handle();
     let directory_row = directory.clone();
     choose.connect_clicked(move |_| {
@@ -315,13 +327,13 @@ fn files_page(context: &Context) -> adw::PreferencesPage {
     group.add(&directory);
 
     let template = adw::EntryRow::builder()
-        .title("Filename template")
+        .title(tr!("Filename template"))
         .text(settings.files.filename_template.clone())
         .build();
-    template.set_tooltip_text(Some(
+    template.set_tooltip_text(Some(&tr!(
         "Expanded with the local capture time; for example Screenshot_%Y-%m-%d_%H-%M-%S. \
-         Press Enter to apply.",
-    ));
+         Press Enter to apply."
+    )));
     let context_template = context.clone_handle();
     template.connect_apply(move |row| {
         let value = row.text().trim().to_string();
@@ -334,8 +346,8 @@ fn files_page(context: &Context) -> adw::PreferencesPage {
     group.add(&template);
 
     let format = adw::ComboRow::builder()
-        .title("Format")
-        .subtitle("Default export format")
+        .title(tr!("Format"))
+        .subtitle(tr!("Default export format"))
         .model(&gtk::StringList::new(&[
             SaveFormat::Png.label(),
             SaveFormat::Jpeg.label(),
@@ -360,8 +372,8 @@ fn files_page(context: &Context) -> adw::PreferencesPage {
     group.add(&format);
 
     let quality = adw::SpinRow::builder()
-        .title("JPEG quality")
-        .subtitle("Only used when the format is JPEG")
+        .title(tr!("JPEG quality"))
+        .subtitle(tr!("Only used when the format is JPEG"))
         .adjustment(&gtk::Adjustment::new(
             f64::from(settings.files.jpeg_quality),
             1.0,
@@ -387,19 +399,19 @@ fn files_page(context: &Context) -> adw::PreferencesPage {
 fn recording_page(context: &Context) -> adw::PreferencesPage {
     let settings = context.settings.borrow().clone();
     let page = adw::PreferencesPage::builder()
-        .title("Recording")
+        .title(tr!("Recording"))
         .icon_name("media-record-symbolic")
         .build();
 
     let output_group = adw::PreferencesGroup::builder()
-        .title("Output")
-        .description("Recordings are written as H.264 MP4 files.")
+        .title(tr!("Output"))
+        .description(tr!("Recordings are written as H.264 MP4 files."))
         .build();
     let directory = adw::ActionRow::builder()
-        .title("Recording folder")
+        .title(tr!("Recording folder"))
         .subtitle(settings.recording_directory().display().to_string())
         .build();
-    let choose = gtk::Button::with_label("Choose…");
+    let choose = gtk::Button::with_label(&tr!("Choose…"));
     let context_choose = context.clone_handle();
     let directory_row = directory.clone();
     choose.connect_clicked(move |_| {
@@ -422,12 +434,12 @@ fn recording_page(context: &Context) -> adw::PreferencesPage {
     page.add(&output_group);
 
     let video_group = adw::PreferencesGroup::builder()
-        .title("Video")
-        .description("Frame rate and bitrate apply to the next recording.")
+        .title(tr!("Video"))
+        .description(tr!("Frame rate and bitrate apply to the next recording."))
         .build();
     let fps = adw::SpinRow::builder()
-        .title("Frame rate")
-        .subtitle("Frames per second (10–60)")
+        .title(tr!("Frame rate"))
+        .subtitle(tr!("Frames per second (10–60)"))
         .adjustment(&gtk::Adjustment::new(
             f64::from(settings.recording.fps),
             f64::from(snipunix_record::MIN_FPS),
@@ -447,8 +459,8 @@ fn recording_page(context: &Context) -> adw::PreferencesPage {
     video_group.add(&fps);
 
     let bitrate = adw::SpinRow::builder()
-        .title("Bitrate")
-        .subtitle("Kilobits per second (500–50000)")
+        .title(tr!("Bitrate"))
+        .subtitle(tr!("Kilobits per second (500–50000)"))
         .adjustment(&gtk::Adjustment::new(
             f64::from(settings.recording.bitrate_kbps),
             f64::from(snipunix_record::MIN_BITRATE_KBPS),
@@ -468,8 +480,10 @@ fn recording_page(context: &Context) -> adw::PreferencesPage {
     video_group.add(&bitrate);
 
     let cursor = adw::SwitchRow::builder()
-        .title("Include the pointer")
-        .subtitle("Ask the compositor to draw the cursor into the recording")
+        .title(tr!("Include the pointer"))
+        .subtitle(tr!(
+            "Ask the compositor to draw the cursor into the recording"
+        ))
         .active(settings.recording.include_cursor)
         .build();
     let context_cursor = context.clone_handle();
@@ -480,15 +494,15 @@ fn recording_page(context: &Context) -> adw::PreferencesPage {
     page.add(&video_group);
 
     let audio_group = adw::PreferencesGroup::builder()
-        .title("Audio")
-        .description(
+        .title(tr!("Audio"))
+        .description(tr!(
             "Both sources are off by default. Each one is recorded separately and \
-             mixed into the MP4.",
-        )
+             mixed into the MP4."
+        ))
         .build();
     let microphone = adw::SwitchRow::builder()
-        .title("Microphone")
-        .subtitle("Record the default microphone")
+        .title(tr!("Microphone"))
+        .subtitle(tr!("Record the default microphone"))
         .active(settings.recording.microphone)
         .build();
     let context_microphone = context.clone_handle();
@@ -498,8 +512,8 @@ fn recording_page(context: &Context) -> adw::PreferencesPage {
     audio_group.add(&microphone);
 
     let system = adw::SwitchRow::builder()
-        .title("System audio")
-        .subtitle("Record the default output monitor (what you hear)")
+        .title(tr!("System audio"))
+        .subtitle(tr!("Record the default output monitor (what you hear)"))
         .active(settings.recording.system_audio)
         .build();
     let context_system = context.clone_handle();
@@ -510,26 +524,26 @@ fn recording_page(context: &Context) -> adw::PreferencesPage {
     page.add(&audio_group);
 
     let permission_group = adw::PreferencesGroup::builder()
-        .title("ScreenCast permission")
-        .description(
+        .title(tr!("ScreenCast permission"))
+        .description(tr!(
             "Snipunix remembers the source you last allowed. Reset it to see the \
-             desktop picker again on the next recording.",
-        )
+             desktop picker again on the next recording."
+        ))
         .build();
     let reset = adw::ActionRow::builder()
-        .title("Forget remembered source")
+        .title(tr!("Forget remembered source"))
         .subtitle(if settings.recording.restore_token.is_some() {
-            "A source is currently remembered"
+            tr!("A source is currently remembered")
         } else {
-            "No source is remembered"
+            tr!("No source is remembered")
         })
         .build();
-    let reset_button = gtk::Button::with_label("Reset");
+    let reset_button = gtk::Button::with_label(&tr!("Reset"));
     reset_button.set_valign(gtk::Align::Center);
     let context_reset = context.clone_handle();
     let reset_row = reset.clone();
     reset_button.connect_clicked(move |_| {
-        reset_row.set_subtitle("No source is remembered");
+        reset_row.set_subtitle(&tr!("No source is remembered"));
         context_reset.update(|settings| settings.recording.restore_token = None);
     });
     reset.add_suffix(&reset_button);
@@ -543,20 +557,22 @@ fn recording_page(context: &Context) -> adw::PreferencesPage {
 fn ocr_page(context: &Context) -> adw::PreferencesPage {
     let settings = context.settings.borrow().clone();
     let page = adw::PreferencesPage::builder()
-        .title("Text Recognition")
+        .title(tr!("Text Recognition"))
         .icon_name("edit-find-symbolic")
         .build();
     let group = adw::PreferencesGroup::builder()
-        .title("Local OCR")
-        .description(
+        .title(tr!("Local OCR"))
+        .description(tr!(
             "Recognition runs on this device with a local model. No screenshot \
-             or recognised text is uploaded.",
-        )
+             or recognised text is uploaded."
+        ))
         .build();
 
     let auto_copy = adw::SwitchRow::builder()
-        .title("Auto-copy extracted text")
-        .subtitle("Place the recognised text on the clipboard when it finishes")
+        .title(tr!("Auto-copy extracted text"))
+        .subtitle(tr!(
+            "Place the recognised text on the clipboard when it finishes"
+        ))
         .active(settings.ocr.auto_copy)
         .build();
     let context_auto_copy = context.clone_handle();
@@ -566,8 +582,8 @@ fn ocr_page(context: &Context) -> adw::PreferencesPage {
     group.add(&auto_copy);
 
     let line_breaks = adw::SwitchRow::builder()
-        .title("Remove line breaks")
-        .subtitle("Join recognised lines into flowing text")
+        .title(tr!("Remove line breaks"))
+        .subtitle(tr!("Join recognised lines into flowing text"))
         .active(settings.ocr.remove_line_breaks)
         .build();
     let context_line_breaks = context.clone_handle();
@@ -578,12 +594,12 @@ fn ocr_page(context: &Context) -> adw::PreferencesPage {
 
     let model_dir = settings.model_directory();
     let model = adw::ActionRow::builder()
-        .title("Model folder")
+        .title(tr!("Model folder"))
         .subtitle(model_dir.display().to_string())
         .build();
     model.set_subtitle_lines(2);
     let model_row = model.clone();
-    let choose = gtk::Button::with_label("Choose…");
+    let choose = gtk::Button::with_label(&tr!("Choose…"));
     let context_model = context.clone_handle();
     choose.connect_clicked(move |_| {
         choose_folder(
@@ -603,16 +619,18 @@ fn ocr_page(context: &Context) -> adw::PreferencesPage {
     group.add(&model);
 
     let download = adw::ActionRow::builder()
-        .title("Download OCR models")
-        .subtitle("Explicit opt-in. Two verified files (~12 MB) are written to the model folder.")
+        .title(tr!("Download OCR models"))
+        .subtitle(tr!(
+            "Explicit opt-in. Two verified files (~12 MB) are written to the model folder."
+        ))
         .build();
-    let download_button = gtk::Button::with_label("Download");
+    let download_button = gtk::Button::with_label(&tr!("Download"));
     let download_row = download.clone();
     let context_download = context.clone_handle();
     download_button.connect_clicked(move |button| {
         let directory = context_download.settings.borrow().model_directory();
         button.set_sensitive(false);
-        download_row.set_subtitle("Downloading and verifying models…");
+        download_row.set_subtitle(&tr!("Downloading and verifying models…"));
         let button = button.clone();
         let download_row = download_row.clone();
         glib::spawn_future_local(async move {
@@ -627,13 +645,13 @@ fn ocr_page(context: &Context) -> adw::PreferencesPage {
             match receiver.recv().await {
                 Ok(Ok(())) => {
                     download_row
-                        .set_subtitle(&format!("Models installed in {}", directory.display()));
+                        .set_subtitle(&tr_fmt!("Models installed in {0}", directory.display()));
                 }
                 Ok(Err(error)) => {
-                    download_row.set_subtitle(&format!("Download failed: {error}"));
+                    download_row.set_subtitle(&tr_fmt!("Download failed: {0}", error));
                 }
                 Err(_) => {
-                    download_row.set_subtitle("The download stopped unexpectedly.");
+                    download_row.set_subtitle(&tr!("The download stopped unexpectedly."));
                 }
             }
             button.set_sensitive(true);
@@ -649,17 +667,17 @@ fn ocr_page(context: &Context) -> adw::PreferencesPage {
 fn appearance_page(context: &Context) -> adw::PreferencesPage {
     let settings = context.settings.borrow().clone();
     let page = adw::PreferencesPage::builder()
-        .title("Appearance")
+        .title(tr!("Appearance"))
         .icon_name("applications-graphics-symbolic")
         .build();
     let group = adw::PreferencesGroup::builder()
-        .title("Selection overlay")
-        .description("Presentation options for the capture overlay.")
+        .title(tr!("Selection overlay"))
+        .description(tr!("Presentation options for the capture overlay."))
         .build();
 
     let magnifier = adw::SwitchRow::builder()
-        .title("Magnifier")
-        .subtitle("Show a magnified pixel grid while selecting")
+        .title(tr!("Magnifier"))
+        .subtitle(tr!("Show a magnified pixel grid while selecting"))
         .active(settings.appearance.show_magnifier)
         .build();
     let context_magnifier = context.clone_handle();
@@ -669,8 +687,8 @@ fn appearance_page(context: &Context) -> adw::PreferencesPage {
     group.add(&magnifier);
 
     let dim = adw::SpinRow::builder()
-        .title("Dim strength")
-        .subtitle("How dark the area outside the selection becomes")
+        .title(tr!("Dim strength"))
+        .subtitle(tr!("How dark the area outside the selection becomes"))
         .adjustment(&gtk::Adjustment::new(
             settings.appearance.dim_strength,
             0.10,
@@ -690,8 +708,8 @@ fn appearance_page(context: &Context) -> adw::PreferencesPage {
     group.add(&dim);
 
     let motion = adw::SwitchRow::builder()
-        .title("Reduced motion")
-        .subtitle("Disable overlay animations")
+        .title(tr!("Reduced motion"))
+        .subtitle(tr!("Disable overlay animations"))
         .active(settings.appearance.reduced_motion)
         .build();
     let context_motion = context.clone_handle();
@@ -704,43 +722,149 @@ fn appearance_page(context: &Context) -> adw::PreferencesPage {
     page
 }
 
-fn about_page() -> adw::PreferencesPage {
+fn about_page(context: &Context) -> adw::PreferencesPage {
+    let settings = context.settings.borrow().clone();
     let page = adw::PreferencesPage::builder()
-        .title("About")
+        .title(tr!("About"))
         .icon_name("help-about-symbolic")
         .build();
     let group = adw::PreferencesGroup::builder()
-        .title("Snipunix")
-        .description("Screenshot. Annotate. Share. All processing stays on this device.")
+        .title(tr!("Snipunix"))
+        .description(tr!(
+            "Screenshot. Annotate. Share. All processing stays on this device."
+        ))
         .build();
 
     let version = adw::ActionRow::builder()
-        .title("Version")
+        .title(tr!("Version"))
         .subtitle(env!("CARGO_PKG_VERSION"))
         .build();
     group.add(&version);
 
     let id = adw::ActionRow::builder()
-        .title("Application ID")
+        .title(tr!("Application ID"))
         .subtitle(APP_ID)
         .subtitle_selectable(true)
         .build();
     group.add(&id);
 
     let license = adw::ActionRow::builder()
-        .title("License")
-        .subtitle("GNU General Public License v3.0")
+        .title(tr!("License"))
+        .subtitle(tr!("GNU General Public License v3.0"))
         .build();
     group.add(&license);
 
     let privacy = adw::ActionRow::builder()
-        .title("Privacy")
-        .subtitle("No telemetry. No cloud OCR. Downloads happen only when requested.")
+        .title(tr!("Privacy"))
+        .subtitle(tr!(
+            "No telemetry. No cloud OCR. Downloads happen only when requested."
+        ))
         .build();
     group.add(&privacy);
 
     page.add(&group);
+
+    let diagnostics = adw::PreferencesGroup::builder()
+        .title(tr!("Diagnostics"))
+        .description(tr!(
+            "Snipunix never sends anything anywhere. These settings only control \
+             what is written to this device."
+        ))
+        .build();
+
+    let crash = adw::SwitchRow::builder()
+        .title(tr!("Save crash reports"))
+        .subtitle(tr!(
+            "Off by default. When enabled, a crash report with the panic message \
+             and a backtrace is written to the local state directory."
+        ))
+        .active(settings.diagnostics.crash_reports)
+        .build();
+    let context_crash = context.clone_handle();
+    crash.connect_active_notify(move |row| {
+        let enabled = row.is_active();
+        context_crash.update(|settings| settings.diagnostics.crash_reports = enabled);
+        snipunix_diagnostics::crash::set_enabled(enabled);
+    });
+    diagnostics.add(&crash);
+
+    let keep = adw::SpinRow::builder()
+        .title(tr!("Keep crash reports"))
+        .subtitle(tr!("How many reports to keep on disk (1–100)"))
+        .adjustment(&gtk::Adjustment::new(
+            f64::from(settings.diagnostics.keep_crash_reports),
+            1.0,
+            100.0,
+            1.0,
+            10.0,
+            0.0,
+        ))
+        .digits(0)
+        .snap_to_ticks(true)
+        .build();
+    let context_keep = context.clone_handle();
+    keep.connect_value_notify(move |row| {
+        let value = row.value().clamp(1.0, 100.0) as u32;
+        context_keep.update(|settings| settings.diagnostics.keep_crash_reports = value);
+        snipunix_diagnostics::crash::set_keep(value as usize);
+    });
+    diagnostics.add(&keep);
+
+    let export = adw::ActionRow::builder()
+        .title(tr!("Export diagnostics"))
+        .subtitle(tr!(
+            "Write a report about this installation to a file you can attach to a \
+             bug report. It contains no screen content and no recognised text."
+        ))
+        .build();
+    export.set_subtitle_lines(3);
+    let export_button = gtk::Button::with_label(&tr!("Export…"));
+    export_button.add_css_class("suggested-action");
+    let context_export = context.clone_handle();
+    export_button.connect_clicked(move |_| {
+        export_diagnostics(&context_export.window);
+    });
+    export.add_suffix(&export_button);
+    export.set_activatable_widget(Some(&export_button));
+    diagnostics.add(&export);
+
+    page.add(&diagnostics);
     page
+}
+
+/// Asks for a file name and writes a diagnostics report to it.
+fn export_diagnostics(parent: &gtk::Window) {
+    let dialog = gtk::FileDialog::builder()
+        .title(tr!("Export diagnostics"))
+        .modal(true)
+        .build();
+    let suggested =
+        snipunix_diagnostics::default_export_directory().join("snipunix-diagnostics.txt");
+    if let Some(parent_dir) = suggested.parent() {
+        dialog.set_initial_folder(Some(&gio::File::for_path(parent_dir)));
+    }
+    let parent = parent.clone();
+    dialog.save(Some(&parent), None::<&gio::Cancellable>, move |result| {
+        let Ok(file) = result else {
+            return;
+        };
+        let Some(path) = file.path() else {
+            tracing::warn!("the diagnostics destination is not a local path");
+            return;
+        };
+        let report = snipunix_diagnostics::collect(&snipunix_diagnostics::ReportOptions {
+            backend: snipunix_capture::BackendKind::Auto,
+            probe_x11: true,
+            crash_directory: Some(snipunix_diagnostics::crash::directory()),
+            include_translations: true,
+        });
+        match snipunix_diagnostics::write_report(&report, &path) {
+            Ok(()) => tracing::info!(path = %path.display(), "wrote a diagnostics report"),
+            Err(error) => {
+                tracing::warn!(%error, path = %path.display(), "could not write the report");
+            }
+        }
+    });
 }
 
 /// Opens the desktop's privacy panel where screenshot permission is listed.
@@ -763,17 +887,18 @@ pub fn open_privacy_settings() -> Result<(), String> {
 /// Explains how to allow screenshots after the portal denied permission.
 pub fn show_permission_help(parent: &gtk::Window, detail: &str) {
     let dialog = adw::MessageDialog::builder()
-        .heading("Screenshot permission was denied")
-        .body(format!(
-            "{detail}\n\nOpen the desktop's privacy settings and allow Snipunix \
+        .heading(tr!("Screenshot permission was denied"))
+        .body(tr_fmt!(
+            "{0}\n\nOpen the desktop's privacy settings and allow Snipunix \
              (or the Screenshot portal) to take screenshots, then try again. \
-             Snipunix never captures in the background."
+             Snipunix never captures in the background.",
+            detail
         ))
         .transient_for(parent)
         .modal(true)
         .build();
-    dialog.add_response("close", "Close");
-    dialog.add_response("open", "Open Privacy Settings");
+    dialog.add_response("close", &tr!("Close"));
+    dialog.add_response("open", &tr!("Open Privacy Settings"));
     dialog.set_response_appearance("open", adw::ResponseAppearance::Suggested);
     dialog.connect_response(None, move |dialog, response| {
         if response == "open" {
@@ -829,18 +954,19 @@ fn launch_first(candidates: &[(&str, &[&str])], description: &str) -> Result<(),
 /// Explains how to bind a shortcut manually after the portal refuses.
 pub fn show_shortcut_help(parent: &gtk::Window, detail: &str) {
     let dialog = adw::MessageDialog::builder()
-        .heading("Global shortcuts are not registered")
-        .body(format!(
-            "{detail}\n\nYou can bind a manual shortcut instead:\n\
+        .heading(tr!("Global shortcuts are not registered"))
+        .body(tr_fmt!(
+            "{0}\n\nYou can bind a manual shortcut instead:\n\
              • GNOME: Settings → Keyboard → View and Customize Shortcuts → Custom Shortcuts\n\
              • KDE Plasma: System Settings → Shortcuts → Custom Shortcuts\n\
-             • Then add `snipunix --capture region` and `snipunix --capture screen`."
+             • Then add `snipunix --capture region` and `snipunix --capture screen`.",
+            detail
         ))
         .transient_for(parent)
         .modal(true)
         .build();
-    dialog.add_response("close", "Close");
-    dialog.add_response("open", "Open Keyboard Settings");
+    dialog.add_response("close", &tr!("Close"));
+    dialog.add_response("open", &tr!("Open Keyboard Settings"));
     dialog.set_response_appearance("open", adw::ResponseAppearance::Suggested);
     dialog.connect_response(None, move |dialog, response| {
         if response == "open" {
@@ -859,7 +985,7 @@ fn choose_folder(
     on_selected: impl Fn(PathBuf) + 'static,
 ) {
     let dialog = gtk::FileDialog::builder()
-        .title("Choose folder")
+        .title(tr!("Choose folder"))
         .modal(true)
         .build();
     if let Some(current) = current {

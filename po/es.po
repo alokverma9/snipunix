@@ -1,0 +1,838 @@
+# Spanish translation for Snipunix.
+# Copyright (C) 2026 Snipunix contributors
+# This file is distributed under the same license as the Snipunix package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: snipunix 0.6.0\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-11-16 00:00+0000\n"
+"Last-Translator: Snipunix contributors\n"
+"Language-Team: Spanish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: es\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "+"
+msgstr "+"
+
+msgid "100%"
+msgstr "100 %"
+
+msgid "A capture is already in progress."
+msgstr "Ya hay una captura en curso."
+
+msgid "A recording is already in progress."
+msgstr "Ya hay una grabación en curso."
+
+msgid "A source is currently remembered"
+msgstr "Actualmente hay una fuente recordada"
+
+msgid "About"
+msgstr "Acerca de"
+
+msgid "About Snipunix"
+msgstr "Acerca de Snipunix"
+
+msgid "Adjust Region"
+msgstr "Ajustar región"
+
+msgid "Annotate"
+msgstr "Anotar"
+
+msgid "Annotation editor ready. Scroll to zoom, middle-drag to pan, Ctrl+Z to undo."
+msgstr "Editor de anotaciones listo. Desplace para ampliar, arrastre con el botón central para mover y Ctrl+Z para deshacer."
+
+msgid "Appearance"
+msgstr "Apariencia"
+
+msgid "Application ID"
+msgstr "ID de la aplicación"
+
+msgid "Apply Crop"
+msgstr "Aplicar recorte"
+
+msgid "Ask the compositor to draw the cursor into the recording"
+msgstr "Pedir al compositor que dibuje el cursor en la grabación"
+
+msgid "Ask the portal for global shortcuts whenever Snipunix starts"
+msgstr "Pedir atajos globales al portal cada vez que se inicia Snipunix"
+
+msgid "Audio"
+msgstr "Audio"
+
+msgid "Auto-copy extracted text"
+msgstr "Copiar el texto extraído automáticamente"
+
+msgid "Auto-save after capture"
+msgstr "Guardar automáticamente tras la captura"
+
+msgid "Beta — Screenshot. Annotate. Share."
+msgstr "Beta — Captura. Anota. Comparte."
+
+msgid "Bitrate"
+msgstr "Tasa de bits"
+
+msgid "Both sources are off by default. Each one is recorded separately and mixed into the MP4."
+msgstr "Ambas fuentes están desactivadas por defecto. Cada una se graba por separado y se mezcla en el MP4."
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "Cancel Crop"
+msgstr "Cancelar recorte"
+
+msgid "Capture"
+msgstr "Captura"
+
+msgid "Capture Region"
+msgstr "Capturar región"
+
+msgid "Capture Screen"
+msgstr "Capturar pantalla"
+
+msgid "Capture Window"
+msgstr "Capturar ventana"
+
+msgid "Capture Window…"
+msgstr "Capturar ventana…"
+
+msgid "Capture a region or the entire screen through the desktop portal. Images stay in memory and never leave this device."
+msgstr "Capture una región o toda la pantalla mediante el portal del escritorio. Las imágenes permanecen en memoria y nunca salen de este dispositivo."
+
+msgid "Capture a region or the full screen, annotate it, and copy or save it. Everything happens on this device."
+msgstr "Capture una región o la pantalla completa, anótela y cópiela o guárdela. Todo ocurre en este dispositivo."
+
+msgid "Capture a screen or region before annotating."
+msgstr "Capture una pantalla o región antes de anotar."
+
+msgid "Capture cancelled."
+msgstr "Captura cancelada."
+
+msgid "Capture defaults"
+msgstr "Valores predeterminados de captura"
+
+msgid "Capture the entire desktop"
+msgstr "Capturar todo el escritorio"
+
+msgid "Capture the screen and select a rectangular region"
+msgstr "Capturar la pantalla y seleccionar una región rectangular"
+
+msgid "Capturing in {0} seconds…"
+msgstr "Capturando en {0} segundos…"
+
+msgid "Capturing the screen…"
+msgstr "Capturando la pantalla…"
+
+msgid "Check"
+msgstr "Comprobar"
+
+msgid "Check that the screenshot portal is available"
+msgstr "Comprobar que el portal de capturas está disponible"
+
+msgid "Checking the desktop portal…"
+msgstr "Comprobando el portal del escritorio…"
+
+msgid "Choose a region to record…"
+msgstr "Elija una región para grabar…"
+
+msgid "Choose folder"
+msgstr "Elegir carpeta"
+
+msgid "Choose save folder"
+msgstr "Elegir carpeta de guardado"
+
+msgid "Choose where screenshots go when you save or auto-save."
+msgstr "Elija dónde se guardan las capturas de pantalla al guardar o al guardar automáticamente."
+
+msgid "Choose…"
+msgstr "Elegir…"
+
+msgid "Close"
+msgstr "Cerrar"
+
+msgid "Close Editor"
+msgstr "Cerrar editor"
+
+msgid "Copied recognised text to the clipboard."
+msgstr "Texto reconocido copiado al portapapeles."
+
+msgid "Copied {0} × {1} to the clipboard."
+msgstr "Se copiaron {0} × {1} al portapapeles."
+
+msgid "Copy"
+msgstr "Copiar"
+
+msgid "Copy All"
+msgstr "Copiar todo"
+
+msgid "Copy Annotated"
+msgstr "Copiar anotado"
+
+msgid "Copy after capture"
+msgstr "Copiar tras la captura"
+
+msgid "Copy the captured image to the clipboard"
+msgstr "Copiar la imagen capturada al portapapeles"
+
+msgid "Could not access the display clipboard."
+msgstr "No se pudo acceder al portapapeles del dispositivo."
+
+msgid "Could not auto-save {0}: {1}"
+msgstr "No se pudo guardar automáticamente {0}: {1}"
+
+msgid "Could not build the monitor layout: {0}"
+msgstr "No se pudo construir la disposición de monitores: {0}"
+
+msgid "Could not change the recording state: {0}"
+msgstr "No se pudo cambiar el estado de la grabación: {0}"
+
+msgid "Could not choose a save location: {0}"
+msgstr "No se pudo elegir una ubicación para guardar: {0}"
+
+msgid "Could not crop the region: {0}"
+msgstr "No se pudo recortar la región: {0}"
+
+msgid "Could not find a free auto-save file name."
+msgstr "No se encontró un nombre de archivo libre para el guardado automático."
+
+msgid "Could not install OCR models."
+msgstr "No se pudieron instalar los modelos de OCR."
+
+msgid "Could not list windows: {0}"
+msgstr "No se pudieron listar las ventanas: {0}"
+
+msgid "Could not locate the editor window."
+msgstr "No se pudo encontrar la ventana del editor."
+
+msgid "Could not map the captured image: {0}"
+msgstr "No se pudo asignar la imagen capturada: {0}"
+
+msgid "Could not open the annotation editor: {0}"
+msgstr "No se pudo abrir el editor de anotaciones: {0}"
+
+msgid "Could not open the selection overlay: {0}"
+msgstr "No se pudo abrir la superposición de selección: {0}"
+
+msgid "Could not read the monitor layout: {0}"
+msgstr "No se pudo leer la disposición de monitores: {0}"
+
+msgid "Could not save the recording: {0}"
+msgstr "No se pudo guardar la grabación: {0}"
+
+msgid "Could not start recording: {0}"
+msgstr "No se pudo iniciar la grabación: {0}"
+
+msgid "Cover detected emails and phone numbers with opaque black"
+msgstr "Cubrir correos y teléfonos detectados con negro opaco"
+
+msgid "Crop applied. Undo restores the previous crop."
+msgstr "Recorte aplicado. Deshacer restaura el recorte anterior."
+
+msgid "Crop cancelled."
+msgstr "Recorte cancelado."
+
+msgid "Custom stroke colour"
+msgstr "Color de trazo personalizado"
+
+msgid "Default export format"
+msgstr "Formato de exportación predeterminado"
+
+msgid "Default mode"
+msgstr "Modo predeterminado"
+
+msgid "Delay"
+msgstr "Retardo"
+
+msgid "Desktop keyboard settings"
+msgstr "Ajustes de teclado del escritorio"
+
+msgid "Diagnostics"
+msgstr "Diagnóstico"
+
+msgid "Dim strength"
+msgstr "Intensidad del oscurecimiento"
+
+msgid "Disable overlay animations"
+msgstr "Desactivar las animaciones de la superposición"
+
+msgid "Download"
+msgstr "Descargar"
+
+msgid "Download Models"
+msgstr "Descargar modelos"
+
+msgid "Download OCR models"
+msgstr "Descargar modelos de OCR"
+
+msgid "Download failed: {0}"
+msgstr "La descarga falló: {0}"
+
+msgid "Downloading and verifying OCR models…"
+msgstr "Descargando y verificando los modelos de OCR…"
+
+msgid "Downloading and verifying models…"
+msgstr "Descargando y verificando los modelos…"
+
+msgid "Draw the mouse pointer into native X11 captures"
+msgstr "Dibujar el puntero del ratón en las capturas nativas de X11"
+
+msgid "Expanded with the local capture time; for example Screenshot_%Y-%m-%d_%H-%M-%S. Press Enter to apply."
+msgstr "Se expande con la hora local de la captura; por ejemplo Captura_%Y-%m-%d_%H-%M-%S. Pulse Intro para aplicar."
+
+msgid "Explicit opt-in. Two verified files (~12 MB) are written to the model folder."
+msgstr "Requiere consentimiento explícito. Se escriben dos archivos verificados (~12 MB) en la carpeta de modelos."
+
+msgid "Export cancelled."
+msgstr "Exportación cancelada."
+
+msgid "Export diagnostics"
+msgstr "Exportar diagnóstico"
+
+msgid "Export…"
+msgstr "Exportar…"
+
+msgid "Extract Text"
+msgstr "Extraer texto"
+
+msgid "Extracted text"
+msgstr "Texto extraído"
+
+msgid "Filename template"
+msgstr "Plantilla del nombre de archivo"
+
+msgid "Files"
+msgstr "Archivos"
+
+msgid "Fit"
+msgstr "Ajustar"
+
+msgid "Forget remembered source"
+msgstr "Olvidar la fuente recordada"
+
+msgid "Format"
+msgstr "Formato"
+
+msgid "Frame rate"
+msgstr "Tasa de fotogramas"
+
+msgid "Frame rate and bitrate apply to the next recording."
+msgstr "La tasa de fotogramas y la tasa de bits se aplican a la próxima grabación."
+
+msgid "Frames per second (10–60)"
+msgstr "Fotogramas por segundo (10–60)"
+
+msgid "Full screen"
+msgstr "Pantalla completa"
+
+msgid "GNU General Public License v3.0"
+msgstr "Licencia Pública General de GNU v3.0"
+
+msgid "Get Started"
+msgstr "Empezar"
+
+msgid "Global shortcut activated: {0}"
+msgstr "Atajo global activado: {0}"
+
+msgid "Global shortcut released: {0}"
+msgstr "Atajo global liberado: {0}"
+
+msgid "Global shortcuts"
+msgstr "Atajos globales"
+
+msgid "Global shortcuts are already registered."
+msgstr "Los atajos globales ya están registrados."
+
+msgid "Global shortcuts are not registered"
+msgstr "Los atajos globales no están registrados"
+
+msgid "Global shortcuts are not registered."
+msgstr "Los atajos globales no están registrados."
+
+msgid "How dark the area outside the selection becomes"
+msgstr "Qué tan oscuro se vuelve el área fuera de la selección"
+
+msgid "How many reports to keep on disk (1–100)"
+msgstr "Cuántos informes conservar en el disco (1–100)"
+
+msgid "If the portal refuses the request, bind a custom shortcut in your desktop's keyboard settings to `snipunix --capture region` and `snipunix --capture screen`."
+msgstr "Si el portal rechaza la solicitud, asigne un atajo personalizado en los ajustes de teclado de su escritorio a `snipunix --capture region` y `snipunix --capture screen`."
+
+msgid "Include pointer"
+msgstr "Incluir el puntero"
+
+msgid "Include the pointer"
+msgstr "Incluir el puntero"
+
+msgid "JPEG quality"
+msgstr "Calidad JPEG"
+
+msgid "Join recognised lines into flowing text"
+msgstr "Unir las líneas reconocidas en un texto continuo"
+
+msgid "Keep crash reports"
+msgstr "Conservar informes de fallos"
+
+msgid "Kilobits per second (500–50000)"
+msgstr "Kilobits por segundo (500–50000)"
+
+msgid "License"
+msgstr "Licencia"
+
+msgid "Local OCR"
+msgstr "OCR local"
+
+msgid "Local OCR only. No telemetry, no cloud upload, and no model download unless you explicitly ask for one."
+msgstr "Solo OCR local. Sin telemetría, sin subida a la nube y sin descarga de modelos salvo que lo solicite expresamente."
+
+msgid "Magnifier"
+msgstr "Lupa"
+
+msgid "Main menu"
+msgstr "Menú principal"
+
+msgid "Microphone"
+msgstr "Micrófono"
+
+msgid "Model folder"
+msgstr "Carpeta de modelos"
+
+msgid "Models installed in {0}"
+msgstr "Modelos instalados en {0}"
+
+msgid "No capturable windows were found."
+msgstr "No se encontraron ventanas capturables."
+
+msgid "No emails or phone numbers were detected."
+msgstr "No se detectaron correos ni números de teléfono."
+
+msgid "No source is remembered"
+msgstr "No hay ninguna fuente recordada"
+
+msgid "No telemetry. No cloud OCR. Downloads happen only when requested."
+msgstr "Sin telemetría. Sin OCR en la nube. Las descargas solo ocurren cuando se solicitan."
+
+msgid "No text was recognised in the current crop."
+msgstr "No se reconoció texto en el recorte actual."
+
+msgid "Not registered yet"
+msgstr "Aún no registrado"
+
+msgid "OCR models installed."
+msgstr "Modelos de OCR instalados."
+
+msgid "OCR runs on this device. Snipunix needs two model files (about 12 MB).\n\n{0}"
+msgstr "El OCR se ejecuta en este dispositivo. Snipunix necesita dos archivos de modelo (unos 12 MB).\n\n{0}"
+
+msgid "Off by default. When enabled, a crash report with the panic message and a backtrace is written to the local state directory."
+msgstr "Desactivado por defecto. Al activarlo, se escribe en el directorio de estado local un informe de fallos con el mensaje del pánico y una traza."
+
+msgid "Only used when the format is JPEG"
+msgstr "Solo se usa cuando el formato es JPEG"
+
+msgid "Open"
+msgstr "Abrir"
+
+msgid "Open Keyboard Settings"
+msgstr "Abrir los ajustes de teclado"
+
+msgid "Open Privacy Settings"
+msgstr "Abrir los ajustes de privacidad"
+
+msgid "Open the annotation editor before extracting text."
+msgstr "Abra el editor de anotaciones antes de extraer texto."
+
+msgid "Open the annotation editor for the latest capture"
+msgstr "Abrir el editor de anotaciones para la última captura"
+
+msgid "Open the system panel to bind a manual shortcut"
+msgstr "Abrir el panel del sistema para asignar un atajo manual"
+
+msgid "Open your desktop's keyboard settings and bind `snipunix --capture region`"
+msgstr "Abra los ajustes de teclado de su escritorio y asigne `snipunix --capture region`"
+
+msgid "Output"
+msgstr "Salida"
+
+msgid "Pause"
+msgstr "Pausar"
+
+msgid "Pause or resume the recording"
+msgstr "Pausar o reanudar la grabación"
+
+msgid "Place the recognised text on the clipboard when it finishes"
+msgstr "Poner el texto reconocido en el portapapeles al terminar"
+
+msgid "Portal Information"
+msgstr "Información del portal"
+
+msgid "Portal trigger syntax, for example CTRL+SHIFT+a. Press Enter to apply."
+msgstr "Sintaxis del disparador del portal, por ejemplo CTRL+SHIFT+a. Pulse Intro para aplicar."
+
+msgid "Portal trigger syntax, for example CTRL+SHIFT+s. Press Enter to apply."
+msgstr "Sintaxis del disparador del portal, por ejemplo CTRL+SHIFT+s. Pulse Intro para aplicar."
+
+msgid "Pre-fill the selection overlay with the previous rectangle"
+msgstr "Rellenar la superposición de selección con el rectángulo anterior"
+
+msgid "Prefer a manual shortcut?"
+msgstr "¿Prefiere un atajo manual?"
+
+msgid "Presentation options for the capture overlay."
+msgstr "Opciones de presentación de la superposición de captura."
+
+msgid "Privacy"
+msgstr "Privacidad"
+
+msgid "Private by design"
+msgstr "Privado por diseño"
+
+msgid "Put the finished screenshot on the clipboard"
+msgstr "Poner la captura final en el portapapeles"
+
+msgid "Quit"
+msgstr "Salir"
+
+msgid "Ready"
+msgstr "Listo"
+
+msgid "Recognise text in the current crop on this device"
+msgstr "Reconocer texto en el recorte actual en este dispositivo"
+
+msgid "Recognising text locally…"
+msgstr "Reconociendo texto localmente…"
+
+msgid "Recognition runs on this device with a local model. No screenshot or recognised text is uploaded."
+msgstr "El reconocimiento se ejecuta en este dispositivo con un modelo local. No se sube ninguna captura ni texto reconocido."
+
+msgid "Record Region"
+msgstr "Grabar región"
+
+msgid "Record Region…"
+msgstr "Grabar región…"
+
+msgid "Record Screen"
+msgstr "Grabar pantalla"
+
+msgid "Record Screen…"
+msgstr "Grabar pantalla…"
+
+msgid "Record a monitor or window through the ScreenCast portal"
+msgstr "Grabar un monitor o una ventana mediante el portal ScreenCast"
+
+msgid "Record the default microphone"
+msgstr "Grabar el micrófono predeterminado"
+
+msgid "Record the default output monitor (what you hear)"
+msgstr "Grabar la salida de audio predeterminada (lo que escucha)"
+
+msgid "Recording"
+msgstr "Grabación"
+
+msgid "Recording could not start."
+msgstr "No se pudo iniciar la grabación."
+
+msgid "Recording failed."
+msgstr "La grabación falló."
+
+msgid "Recording failed: {0}"
+msgstr "La grabación falló: {0}"
+
+msgid "Recording folder"
+msgstr "Carpeta de grabaciones"
+
+msgid "Recording saved to {0} ({1} s, {2} MB)."
+msgstr "Grabación guardada en {0} ({1} s, {2} MB)."
+
+msgid "Recording saved to {0}."
+msgstr "Grabación guardada en {0}."
+
+msgid "Recording. Pause or stop from the recording window."
+msgstr "Grabando. Pause o detenga desde la ventana de grabación."
+
+msgid "Recordings are written as H.264 MP4 files."
+msgstr "Las grabaciones se guardan como archivos MP4 de H.264."
+
+msgid "Redo (Ctrl+Shift+Z)"
+msgstr "Rehacer (Ctrl+Shift+Z)"
+
+msgid "Reduced motion"
+msgstr "Movimiento reducido"
+
+msgid "Region trigger"
+msgstr "Disparador de región"
+
+msgid "Region: {0} · Screen: {1}"
+msgstr "Región: {0} · Pantalla: {1}"
+
+msgid "Register Global Shortcuts"
+msgstr "Registrar atajos globales"
+
+msgid "Register Now"
+msgstr "Registrar ahora"
+
+msgid "Register global shortcuts"
+msgstr "Registrar atajos globales"
+
+msgid "Register on startup"
+msgstr "Registrar al iniciar"
+
+msgid "Registered triggers"
+msgstr "Disparadores registrados"
+
+msgid "Registration goes through the desktop's GlobalShortcuts portal. The portal may remap a trigger; the triggers shown below are the ones it actually accepted."
+msgstr "El registro se realiza a través del portal GlobalShortcuts del escritorio. El portal puede reasignar un disparador; los disparadores que se muestran abajo son los que aceptó."
+
+msgid "Remember last region"
+msgstr "Recordar la última región"
+
+msgid "Remove line breaks"
+msgstr "Quitar los saltos de línea"
+
+msgid "Reopen the selection overlay to adjust the last region"
+msgstr "Reabrir la superposición de selección para ajustar la última región"
+
+msgid "Replace"
+msgstr "Reemplazar"
+
+msgid "Replace existing file?"
+msgstr "¿Reemplazar el archivo existente?"
+
+msgid "Requesting global shortcut registration…"
+msgstr "Solicitando el registro de atajos globales…"
+
+msgid "Reset"
+msgstr "Restablecer"
+
+msgid "Reset Crop"
+msgstr "Restablecer recorte"
+
+msgid "Restore the full captured image"
+msgstr "Restaurar la imagen capturada completa"
+
+msgid "Restored the full captured image."
+msgstr "Se restauró la imagen capturada completa."
+
+msgid "Save As…"
+msgstr "Guardar como…"
+
+msgid "Save crash reports"
+msgstr "Guardar informes de fallos"
+
+msgid "Save folder"
+msgstr "Carpeta de guardado"
+
+msgid "Save screenshot"
+msgstr "Guardar captura"
+
+msgid "Save text"
+msgstr "Guardar texto"
+
+msgid "Save the captured image as a PNG"
+msgstr "Guardar la imagen capturada como PNG"
+
+msgid "Saving"
+msgstr "Guardado"
+
+msgid "Screen trigger"
+msgstr "Disparador de pantalla"
+
+msgid "ScreenCast permission"
+msgstr "Permiso de ScreenCast"
+
+msgid "Screenshot permission"
+msgstr "Permiso de captura de pantalla"
+
+msgid "Screenshot permission was denied"
+msgstr "Se denegó el permiso de captura de pantalla"
+
+msgid "Screenshot portal version {0} is available. Your desktop will show a permission prompt on the first capture."
+msgstr "El portal de capturas versión {0} está disponible. Su escritorio mostrará una solicitud de permiso en la primera captura."
+
+msgid "Screenshot. Annotate. Share."
+msgstr "Captura. Anota. Comparte."
+
+msgid "Screenshot. Annotate. Share. All processing stays on this device."
+msgstr "Captura. Anota. Comparte. Todo el procesamiento permanece en este dispositivo."
+
+msgid "Screenshots"
+msgstr "Capturas de pantalla"
+
+msgid "Seconds to wait before freezing the screen"
+msgstr "Segundos de espera antes de congelar la pantalla"
+
+msgid "Seconds to wait before the screen is frozen"
+msgstr "Segundos de espera antes de que la pantalla se congele"
+
+msgid "Select a region"
+msgstr "Seleccionar una región"
+
+msgid "Select a region on screen, then record a monitor through the ScreenCast portal"
+msgstr "Seleccione una región en la pantalla y luego grabe un monitor mediante el portal ScreenCast"
+
+msgid "Selection overlay"
+msgstr "Superposición de selección"
+
+msgid "Settings…"
+msgstr "Ajustes…"
+
+msgid "Shortcuts"
+msgstr "Atajos"
+
+msgid "Show Snipunix"
+msgstr "Mostrar Snipunix"
+
+msgid "Show a magnified pixel grid while selecting"
+msgstr "Mostrar una cuadrícula de píxeles ampliada al seleccionar"
+
+msgid "Skip"
+msgstr "Omitir"
+
+msgid "Snipunix"
+msgstr "Snipunix"
+
+msgid "Snipunix Recording"
+msgstr "Grabación de Snipunix"
+
+msgid "Snipunix Settings"
+msgstr "Ajustes de Snipunix"
+
+msgid "Snipunix can ask the desktop for global shortcuts. The portal may remap them; the accepted triggers appear in Settings."
+msgstr "Snipunix puede pedir atajos globales al escritorio. El portal puede reasignarlos; los disparadores aceptados aparecen en Ajustes."
+
+msgid "Snipunix is still running so the copied image stays on the clipboard.                      Use Quit to exit."
+msgstr "Snipunix sigue en ejecución para que la imagen copiada permanezca en el portapapeles. Use Salir para terminar."
+
+msgid "Snipunix never sends anything anywhere. These settings only control what is written to this device."
+msgstr "Snipunix nunca envía nada a ninguna parte. Estos ajustes solo controlan lo que se escribe en este dispositivo."
+
+msgid "Snipunix never writes a file without a save action or auto-save enabled."
+msgstr "Snipunix nunca escribe un archivo sin una acción de guardado o el guardado automático activado."
+
+msgid "Snipunix remembers the source you last allowed. Reset it to see the desktop picker again on the next recording."
+msgstr "Snipunix recuerda la fuente que autorizó la última vez. Restablézcala para ver de nuevo el selector del escritorio en la próxima grabación."
+
+msgid "Snipunix uses the desktop Screenshot portal. Your desktop asks for permission the first time; captures are never taken in the background."
+msgstr "Snipunix usa el portal de capturas del escritorio. Su escritorio pide permiso la primera vez; nunca se hacen capturas en segundo plano."
+
+msgid "Stop"
+msgstr "Detener"
+
+msgid "Stop and save the recording"
+msgstr "Detener y guardar la grabación"
+
+msgid "System audio"
+msgstr "Audio del sistema"
+
+msgid "Text Recognition"
+msgstr "Reconocimiento de texto"
+
+msgid "Text annotation"
+msgstr "Anotación de texto"
+
+msgid "Text recognition cancelled: the OCR models are not installed."
+msgstr "Reconocimiento de texto cancelado: los modelos de OCR no están instalados."
+
+msgid "Text recognition failed."
+msgstr "El reconocimiento de texto falló."
+
+msgid "Text recognition is already running."
+msgstr "El reconocimiento de texto ya está en curso."
+
+msgid "Text recognition needs a local model"
+msgstr "El reconocimiento de texto necesita un modelo local"
+
+msgid "The OCR model download stopped unexpectedly."
+msgstr "La descarga de los modelos de OCR se detuvo de forma inesperada."
+
+msgid "The ScreenCast portal returned no stream."
+msgstr "El portal ScreenCast no devolvió ningún flujo."
+
+msgid "The crop selection is too small or outside the image."
+msgstr "La selección de recorte es demasiado pequeña o está fuera de la imagen."
+
+msgid "The download stopped unexpectedly."
+msgstr "La descarga se detuvo de forma inesperada."
+
+msgid "The screenshot portal is unavailable: {0}. Install xdg-desktop-portal and a desktop backend."
+msgstr "El portal de capturas no está disponible: {0}. Instale xdg-desktop-portal y un backend de escritorio."
+
+msgid "The selected export location is not a local file."
+msgstr "La ubicación de exportación seleccionada no es un archivo local."
+
+msgid "The selected location is not a local file."
+msgstr "La ubicación seleccionada no es un archivo local."
+
+msgid "The selected region does not fit the recorded monitor."
+msgstr "La región seleccionada no cabe en el monitor grabado."
+
+msgid "The selected region is not entirely inside the recorded monitor. Record again and choose the monitor that contains it."
+msgstr "La región seleccionada no está completamente dentro del monitor grabado. Grabe de nuevo y elija el monitor que la contiene."
+
+msgid "There is no captured image to copy yet."
+msgstr "Todavía no hay ninguna imagen capturada para copiar."
+
+msgid "There is no captured image to save yet."
+msgstr "Todavía no hay ninguna imagen capturada para guardar."
+
+msgid "There is no recognised text to copy."
+msgstr "No hay texto reconocido para copiar."
+
+msgid "There is no region to adjust."
+msgstr "No hay ninguna región que ajustar."
+
+msgid "These apply to the Capture Region and Capture Screen actions."
+msgstr "Esto se aplica a las acciones Capturar región y Capturar pantalla."
+
+msgid "Troubleshooting"
+msgstr "Resolución de problemas"
+
+msgid "Undo (Ctrl+Z)"
+msgstr "Deshacer (Ctrl+Z)"
+
+msgid "Version"
+msgstr "Versión"
+
+msgid "Video"
+msgstr "Vídeo"
+
+msgid "Welcome to Snipunix"
+msgstr "Bienvenido a Snipunix"
+
+msgid "What the tray and global shortcut open"
+msgstr "Lo que abren la bandeja y el atajo global"
+
+msgid "Window capture cancelled."
+msgstr "Captura de ventana cancelada."
+
+msgid "Window capture needs an X11 session or the x11 backend."
+msgstr "La captura de ventana necesita una sesión X11 o el backend x11."
+
+msgid "Write a file as soon as a capture completes"
+msgstr "Escribir un archivo en cuanto se complete una captura"
+
+msgid "Write a report about this installation to a file you can attach to a bug report. It contains no screen content and no recognised text."
+msgstr "Escribe un informe sobre esta instalación en un archivo que puedes adjuntar a un informe de error. No contiene contenido de pantalla ni texto reconocido."
+
+msgid "Wrote {0}"
+msgstr "Se escribió {0}"
+
+msgid "Zoom in"
+msgstr "Ampliar"
+
+msgid "Zoom out"
+msgstr "Reducir"
+
+msgid "{0}\n\nOpen the desktop's privacy settings and allow Snipunix (or the Screenshot portal) to take screenshots, then try again. Snipunix never captures in the background."
+msgstr "{0}\n\nAbra los ajustes de privacidad del escritorio y permita que Snipunix (o el portal de capturas) tome capturas de pantalla, y vuelva a intentarlo. Snipunix nunca captura en segundo plano."
+
+msgid "{0}\n\nYou can bind a manual shortcut instead:\n• GNOME: Settings → Keyboard → View and Customize Shortcuts → Custom Shortcuts\n• KDE Plasma: System Settings → Shortcuts → Custom Shortcuts\n• Then add `snipunix --capture region` and `snipunix --capture screen`."
+msgstr "{0}\n\nPuede asignar un atajo manual en su lugar:\n• GNOME: Ajustes → Teclado → Ver y personalizar atajos → Atajos personalizados\n• KDE Plasma: Configuración del sistema → Atajos → Atajos personalizados\n• A continuación añada `snipunix --capture region` y `snipunix --capture screen`."
+
+msgid "{0} already exists. Replacing it removes the old file."
+msgstr "{0} ya existe. Al reemplazarlo se elimina el archivo anterior."
+
+msgid "−"
+msgstr "−"

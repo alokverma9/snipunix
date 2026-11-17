@@ -1,0 +1,1148 @@
+# Snipunix translation template.
+# Copyright (C) 2026 Snipunix contributors
+# This file is distributed under the same license as the Snipunix package.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: snipunix 0.6.0\n"
+"Report-Msgid-Bugs-To: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+#: crates/snipunix-app/src/editor.rs:688
+msgid "+"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:691
+msgid "100%"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:607
+#: crates/snipunix-app/src/app.rs:738
+#: crates/snipunix-app/src/app.rs:797
+#: crates/snipunix-app/src/app.rs:834
+#: crates/snipunix-app/src/app.rs:1680
+msgid "A capture is already in progress."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:793
+#: crates/snipunix-app/src/app.rs:830
+msgid "A recording is already in progress."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:526
+msgid "A source is currently remembered"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:714
+msgid "About"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:275
+msgid "About Snipunix"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:348
+msgid "Adjust Region"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:351
+msgid "Annotate"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1537
+msgid "Annotation editor ready. Scroll to zoom, middle-drag to pan, Ctrl+Z to undo."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:656
+msgid "Appearance"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:729
+msgid "Application ID"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:326
+msgid "Apply Crop"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:476
+msgid "Ask the compositor to draw the cursor into the recording"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:180
+msgid "Ask the portal for global shortcuts whenever Snipunix starts"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:487
+msgid "Audio"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:562
+msgid "Auto-copy extracted text"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:280
+msgid "Auto-save after capture"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:257
+msgid "Beta — Screenshot. Annotate. Share."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:454
+msgid "Bitrate"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:489
+msgid "Both sources are off by default. Each one is recorded separately and mixed into the MP4."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1570
+#: crates/snipunix-app/src/editor.rs:1742
+#: crates/snipunix-app/src/editor.rs:2077
+msgid "Cancel"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:327
+msgid "Cancel Crop"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:69
+msgid "Capture"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:305
+#: crates/snipunix-app/src/app.rs:381
+#: crates/snipunix-app/src/tray.rs:69
+#: crates/snipunix-i18n/src/lib.rs:20
+msgid "Capture Region"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:309
+#: crates/snipunix-app/src/app.rs:382
+#: crates/snipunix-app/src/tray.rs:70
+msgid "Capture Screen"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:670
+msgid "Capture Window"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:269
+msgid "Capture Window…"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:376
+msgid "Capture a region or the entire screen through the desktop portal. Images stay in memory and never leave this device."
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:56
+msgid "Capture a region or the full screen, annotate it, and copy or save it. Everything happens on this device."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1497
+msgid "Capture a screen or region before annotating."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:637
+msgid "Capture cancelled."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:73
+msgid "Capture defaults"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:311
+msgid "Capture the entire desktop"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:308
+msgid "Capture the screen and select a rectangular region"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:629
+msgid "Capturing in {0} seconds…"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:742
+msgid "Capturing the screen…"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:81
+msgid "Check"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:79
+msgid "Check that the screenshot portal is available"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:85
+msgid "Checking the desktop portal…"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:801
+msgid "Choose a region to record…"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:970
+msgid "Choose folder"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:163
+msgid "Choose save folder"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:147
+msgid "Choose where screenshots go when you save or auto-save."
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:156
+#: crates/snipunix-app/src/settings_ui.rs:294
+#: crates/snipunix-app/src/settings_ui.rs:406
+#: crates/snipunix-app/src/settings_ui.rs:590
+msgid "Choose…"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1849
+#: crates/snipunix-app/src/settings_ui.rs:882
+#: crates/snipunix-app/src/settings_ui.rs:950
+msgid "Close"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:711
+msgid "Close Editor"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1948
+#: crates/snipunix-app/src/editor.rs:1949
+msgid "Copied recognised text to the clipboard."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1569
+msgid "Copied {0} × {1} to the clipboard."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:342
+msgid "Copy"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1847
+msgid "Copy All"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:703
+msgid "Copy Annotated"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:125
+msgid "Copy after capture"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:344
+msgid "Copy the captured image to the clipboard"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1477
+#: crates/snipunix-app/src/editor.rs:390
+#: crates/snipunix-app/src/editor.rs:833
+#: crates/snipunix-app/src/editor.rs:1951
+msgid "Could not access the display clipboard."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1774
+msgid "Could not auto-save {0}: {1}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1288
+msgid "Could not build the monitor layout: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1111
+msgid "Could not change the recording state: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1638
+msgid "Could not choose a save location: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1470
+msgid "Could not crop the region: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1757
+msgid "Could not find a free auto-save file name."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1770
+msgid "Could not install OCR models."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:660
+msgid "Could not list windows: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:401
+#: crates/snipunix-app/src/editor.rs:412
+msgid "Could not locate the editor window."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1303
+msgid "Could not map the captured image: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1541
+msgid "Could not open the annotation editor: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1358
+msgid "Could not open the selection overlay: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1280
+msgid "Could not read the monitor layout: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1141
+msgid "Could not save the recording: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:955
+msgid "Could not start recording: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1844
+msgid "Cover detected emails and phone numbers with opaque black"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:805
+msgid "Crop applied. Undo restores the previous crop."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:812
+msgid "Crop cancelled."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:522
+msgid "Custom stroke colour"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:342
+msgid "Default export format"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:78
+msgid "Default mode"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:327
+#: crates/snipunix-app/src/settings_ui.rs:102
+msgid "Delay"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:255
+msgid "Desktop keyboard settings"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:750
+msgid "Diagnostics"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:676
+msgid "Dim strength"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:698
+msgid "Disable overlay animations"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:613
+msgid "Download"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1743
+msgid "Download Models"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:610
+msgid "Download OCR models"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:637
+msgid "Download failed: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1756
+msgid "Downloading and verifying OCR models…"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:619
+msgid "Downloading and verifying models…"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:150
+msgid "Draw the mouse pointer into native X11 captures"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:326
+msgid "Expanded with the local capture time; for example Screenshot_%Y-%m-%d_%H-%M-%S. Press Enter to apply."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:611
+msgid "Explicit opt-in. Two verified files (~12 MB) are written to the model folder."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:2088
+msgid "Export cancelled."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:796
+#: crates/snipunix-app/src/settings_ui.rs:820
+msgid "Export diagnostics"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:707
+#: crates/snipunix-app/src/settings_ui.rs:803
+msgid "Export…"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:705
+msgid "Extract Text"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1786
+msgid "Extracted text"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:322
+msgid "Filename template"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:271
+msgid "Files"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:690
+msgid "Fit"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:524
+msgid "Forget remembered source"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:341
+msgid "Format"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:433
+msgid "Frame rate"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:430
+msgid "Frame rate and bitrate apply to the next recording."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:434
+msgid "Frames per second (10–60)"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:82
+msgid "Full screen"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:737
+msgid "GNU General Public License v3.0"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:207
+msgid "Get Started"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:2003
+msgid "Global shortcut activated: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:2011
+msgid "Global shortcut released: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:113
+#: crates/snipunix-app/src/settings_ui.rs:170
+msgid "Global shortcuts"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1823
+msgid "Global shortcuts are already registered."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:939
+msgid "Global shortcuts are not registered"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1996
+msgid "Global shortcuts are not registered."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:677
+msgid "How dark the area outside the selection becomes"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:775
+msgid "How many reports to keep on disk (1–100)"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:249
+msgid "If the portal refuses the request, bind a custom shortcut in your desktop's keyboard settings to `snipunix --capture region` and `snipunix --capture screen`."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:149
+msgid "Include pointer"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:475
+msgid "Include the pointer"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:367
+msgid "JPEG quality"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:574
+msgid "Join recognised lines into flowing text"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:774
+msgid "Keep crash reports"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:455
+msgid "Kilobits per second (500–50000)"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:736
+msgid "License"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:554
+msgid "Local OCR"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:195
+msgid "Local OCR only. No telemetry, no cloud upload, and no model download unless you explicitly ask for one."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:665
+msgid "Magnifier"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:293
+msgid "Main menu"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:494
+msgid "Microphone"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:585
+msgid "Model folder"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:634
+msgid "Models installed in {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:665
+msgid "No capturable windows were found."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1961
+msgid "No emails or phone numbers were detected."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:528
+#: crates/snipunix-app/src/settings_ui.rs:536
+msgid "No source is remembered"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:743
+msgid "No telemetry. No cloud OCR. Downloads happen only when requested."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1711
+#: crates/snipunix-app/src/editor.rs:1712
+msgid "No text was recognised in the current crop."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:230
+msgid "Not registered yet"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1766
+msgid "OCR models installed."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1738
+msgid "OCR runs on this device. Snipunix needs two model files (about 12 MB).\n\n{0}"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:759
+msgid "Off by default. When enabled, a crash report with the panic message and a backtrace is written to the local state directory."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:368
+msgid "Only used when the format is JPEG"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:136
+#: crates/snipunix-app/src/settings_ui.rs:258
+msgid "Open"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:951
+msgid "Open Keyboard Settings"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:883
+msgid "Open Privacy Settings"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:546
+msgid "Open the annotation editor before extracting text."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:354
+msgid "Open the annotation editor for the latest capture"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:256
+msgid "Open the system panel to bind a manual shortcut"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:132
+msgid "Open your desktop's keyboard settings and bind `snipunix --capture region`"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:399
+msgid "Output"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1023
+msgid "Pause"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1024
+msgid "Pause or resume the recording"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:563
+msgid "Place the recognised text on the clipboard when it finishes"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:274
+msgid "Portal Information"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:214
+msgid "Portal trigger syntax, for example CTRL+SHIFT+a. Press Enter to apply."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:196
+msgid "Portal trigger syntax, for example CTRL+SHIFT+s. Press Enter to apply."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:137
+msgid "Pre-fill the selection overlay with the previous rectangle"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:131
+msgid "Prefer a manual shortcut?"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:661
+msgid "Presentation options for the capture overlay."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:742
+msgid "Privacy"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:194
+msgid "Private by design"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:126
+msgid "Put the finished screenshot on the clipboard"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:276
+#: crates/snipunix-app/src/tray.rs:75
+msgid "Quit"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:413
+msgid "Ready"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:706
+msgid "Recognise text in the current crop on this device"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1692
+msgid "Recognising text locally…"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:556
+msgid "Recognition runs on this device with a local model. No screenshot or recognised text is uploaded."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:317
+msgid "Record Region"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:271
+msgid "Record Region…"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:312
+msgid "Record Screen"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:270
+msgid "Record Screen…"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:315
+msgid "Record a monitor or window through the ScreenCast portal"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:495
+msgid "Record the default microphone"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:506
+msgid "Record the default output monitor (what you hear)"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:394
+msgid "Recording"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:956
+msgid "Recording could not start."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1140
+msgid "Recording failed."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1077
+msgid "Recording failed: {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:403
+msgid "Recording folder"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1137
+msgid "Recording saved to {0} ({1} s, {2} MB)."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1136
+msgid "Recording saved to {0}."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:951
+msgid "Recording. Pause or stop from the recording window."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:400
+msgid "Recordings are written as H.264 MP4 files."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:325
+msgid "Redo (Ctrl+Shift+Z)"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:697
+msgid "Reduced motion"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:192
+msgid "Region trigger"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:121
+msgid "Region: {0} · Screen: {1}"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:272
+msgid "Register Global Shortcuts"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:237
+msgid "Register Now"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:120
+msgid "Register global shortcuts"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:179
+msgid "Register on startup"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:228
+msgid "Registered triggers"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:172
+msgid "Registration goes through the desktop's GlobalShortcuts portal. The portal may remap a trigger; the triggers shown below are the ones it actually accepted."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:136
+msgid "Remember last region"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:573
+msgid "Remove line breaks"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:359
+msgid "Reopen the selection overlay to adjust the last region"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:2078
+msgid "Replace"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:2072
+msgid "Replace existing file?"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1826
+msgid "Requesting global shortcut registration…"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:531
+msgid "Reset"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:697
+msgid "Reset Crop"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:698
+msgid "Restore the full captured image"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:774
+msgid "Restored the full captured image."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:345
+msgid "Save As…"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:758
+msgid "Save crash reports"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:152
+#: crates/snipunix-app/src/settings_ui.rs:291
+msgid "Save folder"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1590
+msgid "Save screenshot"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1571
+msgid "Save text"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:347
+msgid "Save the captured image as a PNG"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:146
+#: crates/snipunix-app/src/settings_ui.rs:275
+msgid "Saving"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:210
+msgid "Screen trigger"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:517
+msgid "ScreenCast permission"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:78
+msgid "Screenshot permission"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:872
+msgid "Screenshot permission was denied"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:90
+msgid "Screenshot portal version {0} is available. Your desktop will show a permission prompt on the first capture."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:259
+#: crates/snipunix-app/src/app.rs:374
+msgid "Screenshot. Annotate. Share."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:719
+msgid "Screenshot. Annotate. Share. All processing stays on this device."
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:71
+msgid "Screenshots"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:332
+msgid "Seconds to wait before freezing the screen"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:103
+msgid "Seconds to wait before the screen is frozen"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:81
+msgid "Select a region"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:320
+msgid "Select a region on screen, then record a monitor through the ScreenCast portal"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:660
+msgid "Selection overlay"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:273
+#: crates/snipunix-app/src/tray.rs:73
+msgid "Settings…"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:166
+msgid "Shortcuts"
+msgstr ""
+
+#: crates/snipunix-app/src/tray.rs:72
+msgid "Show Snipunix"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:666
+msgid "Show a magnified pixel grid while selecting"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:206
+msgid "Skip"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:248
+#: crates/snipunix-app/src/app.rs:255
+#: crates/snipunix-app/src/settings_ui.rs:718
+msgid "Snipunix"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1008
+msgid "Snipunix Recording"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:38
+msgid "Snipunix Settings"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:114
+msgid "Snipunix can ask the desktop for global shortcuts. The portal may remap them; the accepted triggers appear in Settings."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:490
+msgid "Snipunix is still running so the copied image stays on the clipboard.                      Use Quit to exit."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:751
+msgid "Snipunix never sends anything anywhere. These settings only control what is written to this device."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:276
+msgid "Snipunix never writes a file without a save action or auto-save enabled."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:519
+msgid "Snipunix remembers the source you last allowed. Reset it to see the desktop picker again on the next recording."
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:72
+msgid "Snipunix uses the desktop Screenshot portal. Your desktop asks for permission the first time; captures are never taken in the background."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1025
+msgid "Stop"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1027
+msgid "Stop and save the recording"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:505
+msgid "System audio"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:550
+msgid "Text Recognition"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1545
+msgid "Text annotation"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1752
+msgid "Text recognition cancelled: the OCR models are not installed."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1728
+msgid "Text recognition failed."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1660
+msgid "Text recognition is already running."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1737
+msgid "Text recognition needs a local model"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1773
+msgid "The OCR model download stopped unexpectedly."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:883
+msgid "The ScreenCast portal returned no stream."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:789
+msgid "The crop selection is too small or outside the image."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:640
+msgid "The download stopped unexpectedly."
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:95
+msgid "The screenshot portal is unavailable: {0}. Install xdg-desktop-portal and a desktop backend."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:2150
+msgid "The selected export location is not a local file."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1614
+msgid "The selected location is not a local file."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:907
+msgid "The selected region does not fit the recorded monitor."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:904
+msgid "The selected region is not entirely inside the recorded monitor. Record again and choose the monitor that contains it."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1565
+msgid "There is no captured image to copy yet."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1579
+msgid "There is no captured image to save yet."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:1944
+msgid "There is no recognised text to copy."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:1684
+msgid "There is no region to adjust."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:74
+msgid "These apply to the Capture Region and Capture Screen actions."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:247
+msgid "Troubleshooting"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:323
+msgid "Undo (Ctrl+Z)"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:723
+msgid "Version"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:429
+msgid "Video"
+msgstr ""
+
+#: crates/snipunix-app/src/onboarding.rs:28
+#: crates/snipunix-app/src/onboarding.rs:52
+msgid "Welcome to Snipunix"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:79
+msgid "What the tray and global shortcut open"
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:728
+msgid "Window capture cancelled."
+msgstr ""
+
+#: crates/snipunix-app/src/app.rs:614
+#: crates/snipunix-app/src/app.rs:654
+msgid "Window capture needs an X11 session or the x11 backend."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:281
+msgid "Write a file as soon as a capture completes"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:797
+msgid "Write a report about this installation to a file you can attach to a bug report. It contains no screen content and no recognised text."
+msgstr ""
+
+#: crates/snipunix-i18n/src/lib.rs:21
+#: crates/snipunix-i18n/src/lib.rs:137
+msgid "Wrote {0}"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:689
+msgid "Zoom in"
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:687
+msgid "Zoom out"
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:873
+msgid "{0}\n\nOpen the desktop's privacy settings and allow Snipunix (or the Screenshot portal) to take screenshots, then try again. Snipunix never captures in the background."
+msgstr ""
+
+#: crates/snipunix-app/src/settings_ui.rs:940
+msgid "{0}\n\nYou can bind a manual shortcut instead:\n• GNOME: Settings → Keyboard → View and Customize Shortcuts → Custom Shortcuts\n• KDE Plasma: System Settings → Shortcuts → Custom Shortcuts\n• Then add `snipunix --capture region` and `snipunix --capture screen`."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:2073
+msgid "{0} already exists. Replacing it removes the old file."
+msgstr ""
+
+#: crates/snipunix-app/src/editor.rs:686
+msgid "−"
+msgstr ""
+

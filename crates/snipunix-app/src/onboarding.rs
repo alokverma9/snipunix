@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use libadwaita as adw;
+use snipunix_i18n::{tr, tr_fmt};
 use snipunix_settings::Settings;
 
 use crate::settings_ui;
@@ -24,7 +25,7 @@ pub fn show(
     open_keyboard_settings: Rc<dyn Fn()>,
 ) {
     let window = adw::Window::builder()
-        .title("Welcome to Snipunix")
+        .title(tr!("Welcome to Snipunix"))
         .transient_for(parent)
         .modal(true)
         .default_width(620)
@@ -46,12 +47,15 @@ pub fn show(
     icon.set_pixel_size(72);
     icon.set_halign(gtk::Align::Center);
     let title = gtk::Label::new(None);
-    title.set_markup("<span size='xx-large' weight='bold'>Welcome to Snipunix</span>");
-    title.set_halign(gtk::Align::Center);
-    let subtitle = gtk::Label::new(Some(
-        "Capture a region or the full screen, annotate it, and copy or save it. \
-         Everything happens on this device.",
+    title.set_markup(&format!(
+        "<span size='xx-large' weight='bold'>{}</span>",
+        tr!("Welcome to Snipunix")
     ));
+    title.set_halign(gtk::Align::Center);
+    let subtitle = gtk::Label::new(Some(&tr!(
+        "Capture a region or the full screen, annotate it, and copy or save it. \
+             Everything happens on this device."
+    )));
     subtitle.set_wrap(true);
     subtitle.set_justify(gtk::Justification::Center);
     subtitle.add_css_class("dim-label");
@@ -63,33 +67,34 @@ pub fn show(
 
     // 1. Screenshot permission priming.
     let permission_group = adw::PreferencesGroup::builder()
-        .title("Screenshots")
-        .description(
+        .title(tr!("Screenshots"))
+        .description(tr!(
             "Snipunix uses the desktop Screenshot portal. Your desktop asks for \
-             permission the first time; captures are never taken in the background.",
-        )
+             permission the first time; captures are never taken in the background."
+        ))
         .build();
     let permission = adw::ActionRow::builder()
-        .title("Screenshot permission")
-        .subtitle("Check that the screenshot portal is available")
+        .title(tr!("Screenshot permission"))
+        .subtitle(tr!("Check that the screenshot portal is available"))
         .build();
-    let check = gtk::Button::with_label("Check");
+    let check = gtk::Button::with_label(&tr!("Check"));
     let permission_row = permission.clone();
     check.connect_clicked(move |button| {
         button.set_sensitive(false);
-        permission_row.set_subtitle("Checking the desktop portal…");
+        permission_row.set_subtitle(&tr!("Checking the desktop portal…"));
         let row = permission_row.clone();
         let button = button.clone();
         glib::spawn_future_local(async move {
             let message = match snipunix_capture::probe_portal().await {
-                Ok(info) => format!(
-                    "Screenshot portal version {} is available. \
+                Ok(info) => tr_fmt!(
+                    "Screenshot portal version {0} is available. \
                      Your desktop will show a permission prompt on the first capture.",
                     info.version
                 ),
-                Err(error) => format!(
-                    "The screenshot portal is unavailable: {error}. \
-                     Install xdg-desktop-portal and a desktop backend."
+                Err(error) => tr_fmt!(
+                    "The screenshot portal is unavailable: {0}. \
+                     Install xdg-desktop-portal and a desktop backend.",
+                    error
                 ),
             };
             row.set_subtitle(&message);
@@ -104,27 +109,30 @@ pub fn show(
     // 2. Global shortcuts.
     let current = settings.borrow().clone();
     let shortcut_group = adw::PreferencesGroup::builder()
-        .title("Global shortcuts")
-        .description(
+        .title(tr!("Global shortcuts"))
+        .description(tr!(
             "Snipunix can ask the desktop for global shortcuts. The portal may \
-             remap them; the accepted triggers appear in Settings.",
-        )
+             remap them; the accepted triggers appear in Settings."
+        ))
         .build();
     let register = adw::SwitchRow::builder()
-        .title("Register global shortcuts")
-        .subtitle(format!(
-            "Region: {} · Screen: {}",
-            current.shortcuts.region_trigger, current.shortcuts.screen_trigger
+        .title(tr!("Register global shortcuts"))
+        .subtitle(tr_fmt!(
+            "Region: {0} · Screen: {1}",
+            current.shortcuts.region_trigger,
+            current.shortcuts.screen_trigger
         ))
         .active(true)
         .build();
     shortcut_group.add(&register);
 
     let manual = adw::ActionRow::builder()
-        .title("Prefer a manual shortcut?")
-        .subtitle("Open your desktop's keyboard settings and bind `snipunix --capture region`")
+        .title(tr!("Prefer a manual shortcut?"))
+        .subtitle(tr!(
+            "Open your desktop's keyboard settings and bind `snipunix --capture region`"
+        ))
         .build();
-    let open = gtk::Button::with_label("Open");
+    let open = gtk::Button::with_label(&tr!("Open"));
     let callback = Rc::clone(&open_keyboard_settings);
     open.connect_clicked(move |_| callback());
     manual.add_suffix(&open);
@@ -134,22 +142,24 @@ pub fn show(
 
     // 3. Save folder.
     let folder_group = adw::PreferencesGroup::builder()
-        .title("Saving")
-        .description("Choose where screenshots go when you save or auto-save.")
+        .title(tr!("Saving"))
+        .description(tr!(
+            "Choose where screenshots go when you save or auto-save."
+        ))
         .build();
     let folder = adw::ActionRow::builder()
-        .title("Save folder")
+        .title(tr!("Save folder"))
         .subtitle(current.files.directory_or_default().display().to_string())
         .build();
     folder.set_subtitle_lines(2);
-    let choose = gtk::Button::with_label("Choose…");
+    let choose = gtk::Button::with_label(&tr!("Choose…"));
     let folder_row = folder.clone();
     let settings_for_folder = Rc::clone(&settings);
     let path_for_folder = path.clone();
     let window_for_choose = window.clone();
     choose.connect_clicked(move |_| {
         let dialog = gtk::FileDialog::builder()
-            .title("Choose save folder")
+            .title(tr!("Choose save folder"))
             .modal(true)
             .build();
         if let Some(directory) = settings_for_folder.borrow().files.directory.clone() {
@@ -180,11 +190,11 @@ pub fn show(
     folder_group.add(&folder);
 
     let privacy = adw::ActionRow::builder()
-        .title("Private by design")
-        .subtitle(
+        .title(tr!("Private by design"))
+        .subtitle(tr!(
             "Local OCR only. No telemetry, no cloud upload, and no model download \
-             unless you explicitly ask for one.",
-        )
+             unless you explicitly ask for one."
+        ))
         .build();
     privacy.set_subtitle_lines(3);
     folder_group.add(&privacy);
@@ -192,8 +202,8 @@ pub fn show(
 
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     actions.set_halign(gtk::Align::End);
-    let skip = gtk::Button::with_label("Skip");
-    let start = gtk::Button::with_label("Get Started");
+    let skip = gtk::Button::with_label(&tr!("Skip"));
+    let start = gtk::Button::with_label(&tr!("Get Started"));
     start.add_css_class("suggested-action");
     actions.append(&skip);
     actions.append(&start);

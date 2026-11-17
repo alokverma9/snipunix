@@ -15,6 +15,7 @@ use snipunix_capture::{
 use snipunix_core::{
     CaptureMapping, ImageRect, LogicalPoint, LogicalRect, LogicalSize, MappingError, MonitorImage,
 };
+use snipunix_i18n::{tr, tr_fmt};
 use snipunix_overlay::{
     OverlayFrames, OverlayOptions, OverlayResult, collect_monitors, layout_from_monitors, present,
     start_countdown,
@@ -30,7 +31,22 @@ use crate::settings_ui;
 use crate::shortcuts::{self, BoundShortcut, ShortcutEvent};
 use crate::tray::{self, TrayCommand};
 
-pub const APP_ID: &str = "io.github.alokverma9.snipunix";
+/// The application identifier.
+///
+/// The stable build uses `io.github.alokverma9.snipunix`. The beta channel
+/// compiles with `SNIPUNIX_APP_ID=io.github.alokverma9.snipunix.Beta` so the
+/// desktop portals keep the two channels' permissions apart.
+pub const APP_ID: &str = env!("SNIPUNIX_APP_ID");
+
+/// Whether this build is a beta build.
+///
+/// The beta build shows a marker in the window so a user never mistakes it
+/// for the stable release.
+#[cfg(snipunix_beta)]
+pub const IS_BETA: bool = true;
+/// Whether this build is a beta build.
+#[cfg(not(snipunix_beta))]
+pub const IS_BETA: bool = false;
 
 pub fn run(cli: Cli) -> glib::ExitCode {
     let app = adw::Application::builder().application_id(APP_ID).build();
@@ -69,6 +85,13 @@ fn activate(app: &adw::Application, cli: Cli) {
     if let Err(error) = adw::init() {
         tracing::error!(%error, "failed to initialise libadwaita");
     }
+
+    // Local crash reporting is off unless the user turned it on. Reading the
+    // setting before the window is built means a panic during startup is
+    // covered as well.
+    let settings_path = snipunix_settings::Settings::default_path();
+    let startup_settings = snipunix_settings::Settings::load(&settings_path).unwrap_or_default();
+    crate::apply_crash_reporting(&startup_settings);
 
     let state = build_window(app, cli);
     install_actions(&state);
@@ -225,13 +248,18 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
-        .title("Snipunix")
+        .title(tr!("Snipunix"))
         .default_width(1100)
         .default_height(760)
         .build();
 
     let header = adw::HeaderBar::new();
-    let title = adw::WindowTitle::new("Snipunix", "Screenshot. Annotate. Share.");
+    let subtitle = if IS_BETA {
+        tr!("Beta — Screenshot. Annotate. Share.")
+    } else {
+        tr!("Screenshot. Annotate. Share.")
+    };
+    let title = adw::WindowTitle::new(&tr!("Snipunix"), &subtitle);
     header.set_title_widget(Some(&title));
 
     let menu_popover = gtk::Popover::new();
@@ -239,16 +267,16 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     let menu_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
     menu_box.add_css_class("menu");
     for (label, action) in [
-        ("Capture Window…", "app.capture-window"),
-        ("Record Screen…", "app.record-screen"),
-        ("Record Region…", "app.record-region"),
-        ("Register Global Shortcuts", "app.register-shortcuts"),
-        ("Settings…", "app.settings"),
-        ("Portal Information", "app.portal-info"),
-        ("About Snipunix", "app.about"),
-        ("Quit", "app.quit"),
+        (tr!("Capture Window…"), "app.capture-window"),
+        (tr!("Record Screen…"), "app.record-screen"),
+        (tr!("Record Region…"), "app.record-region"),
+        (tr!("Register Global Shortcuts"), "app.register-shortcuts"),
+        (tr!("Settings…"), "app.settings"),
+        (tr!("Portal Information"), "app.portal-info"),
+        (tr!("About Snipunix"), "app.about"),
+        (tr!("Quit"), "app.quit"),
     ] {
-        let item = gtk::Button::with_label(label);
+        let item = gtk::Button::with_label(&label);
         item.set_action_name(Some(action));
         item.set_halign(gtk::Align::Fill);
         item.add_css_class("flat");
@@ -263,7 +291,7 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     let menu_button = gtk::MenuButton::builder()
         .icon_name("open-menu-symbolic")
         .popover(&menu_popover)
-        .tooltip_text("Main menu")
+        .tooltip_text(tr!("Main menu"))
         .build();
     header.pack_end(&menu_button);
 
@@ -275,34 +303,39 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     action_bar.set_margin_bottom(6);
     action_bar.set_margin_start(12);
     action_bar.set_margin_end(12);
-    let region_button = gtk::Button::with_label("Capture Region");
+    let region_button = gtk::Button::with_label(&tr!("Capture Region"));
     region_button.add_css_class("suggested-action");
     region_button.set_action_name(Some("app.capture-region"));
-    region_button.set_tooltip_text(Some("Capture the screen and select a rectangular region"));
-    let screen_button = gtk::Button::with_label("Capture Screen");
+    region_button.set_tooltip_text(Some(
+        tr!("Capture the screen and select a rectangular region").as_str(),
+    ));
+    let screen_button = gtk::Button::with_label(&tr!("Capture Screen"));
     screen_button.set_action_name(Some("app.capture-screen"));
-    screen_button.set_tooltip_text(Some("Capture the entire desktop"));
-    let record_button = gtk::Button::with_label("Record Screen");
+    screen_button.set_tooltip_text(Some(tr!("Capture the entire desktop").as_str()));
+    let record_button = gtk::Button::with_label(&tr!("Record Screen"));
     record_button.set_action_name(Some("app.record-screen"));
     record_button.set_tooltip_text(Some(
-        "Record a monitor or window through the ScreenCast portal",
+        tr!("Record a monitor or window through the ScreenCast portal").as_str(),
     ));
-    let record_region_button = gtk::Button::with_label("Record Region");
+    let record_region_button = gtk::Button::with_label(&tr!("Record Region"));
     record_region_button.set_action_name(Some("app.record-region"));
     record_region_button.set_tooltip_text(Some(
-        "Select a region on screen, then record a monitor through the ScreenCast portal",
+        tr!("Select a region on screen, then record a monitor through the ScreenCast portal")
+            .as_str(),
     ));
     action_bar.append(&region_button);
     action_bar.append(&screen_button);
     action_bar.append(&record_button);
     action_bar.append(&record_region_button);
 
-    let delay_label = gtk::Label::new(Some("Delay"));
+    let delay_label = gtk::Label::new(Some(tr!("Delay").as_str()));
     delay_label.add_css_class("dim-label");
     delay_label.set_margin_start(12);
     let delay_spin = gtk::SpinButton::with_range(0.0, 10.0, 1.0);
     delay_spin.set_value(f64::from(loaded.capture.delay));
-    delay_spin.set_tooltip_text(Some("Seconds to wait before freezing the screen"));
+    delay_spin.set_tooltip_text(Some(
+        tr!("Seconds to wait before freezing the screen").as_str(),
+    ));
     delay_spin.set_width_chars(2);
     action_bar.append(&delay_label);
     action_bar.append(&delay_spin);
@@ -312,24 +345,28 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     preview_bar.set_margin_start(12);
     preview_bar.set_margin_end(12);
     preview_bar.set_margin_bottom(6);
-    let copy_button = gtk::Button::with_label("Copy");
+    let copy_button = gtk::Button::with_label(&tr!("Copy"));
     copy_button.set_action_name(Some("app.copy"));
-    copy_button.set_tooltip_text(Some("Copy the captured image to the clipboard"));
-    let save_button = gtk::Button::with_label("Save As…");
+    copy_button.set_tooltip_text(Some(
+        tr!("Copy the captured image to the clipboard").as_str(),
+    ));
+    let save_button = gtk::Button::with_label(&tr!("Save As…"));
     save_button.set_action_name(Some("app.save-as"));
-    save_button.set_tooltip_text(Some("Save the captured image as a PNG"));
-    let adjust_button = gtk::Button::with_label("Adjust Region");
+    save_button.set_tooltip_text(Some(tr!("Save the captured image as a PNG").as_str()));
+    let adjust_button = gtk::Button::with_label(&tr!("Adjust Region"));
     adjust_button.set_action_name(Some("app.adjust"));
     adjust_button.set_sensitive(false);
-    let annotate_button = gtk::Button::with_label("Annotate");
+    let annotate_button = gtk::Button::with_label(&tr!("Annotate"));
     annotate_button.add_css_class("suggested-action");
     annotate_button.set_action_name(Some("app.annotate"));
-    annotate_button.set_tooltip_text(Some("Open the annotation editor for the latest capture"));
+    annotate_button.set_tooltip_text(Some(
+        tr!("Open the annotation editor for the latest capture").as_str(),
+    ));
     annotate_button.set_sensitive(false);
     copy_button.set_sensitive(false);
     save_button.set_sensitive(false);
     adjust_button.set_tooltip_text(Some(
-        "Reopen the selection overlay to adjust the last region",
+        tr!("Reopen the selection overlay to adjust the last region").as_str(),
     ));
     preview_bar.append(&copy_button);
     preview_bar.append(&save_button);
@@ -344,17 +381,17 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
 
     let empty_page = adw::StatusPage::builder()
         .icon_name("camera-photo-symbolic")
-        .title("Screenshot. Annotate. Share.")
-        .description(
+        .title(tr!("Screenshot. Annotate. Share."))
+        .description(tr!(
             "Capture a region or the entire screen through the desktop portal. \
-             Images stay in memory and never leave this device.",
-        )
+             Images stay in memory and never leave this device."
+        ))
         .build();
     let (empty_label, empty_target) = match loaded.capture.default_mode {
-        CaptureMode::Region => ("Capture Region", "app.capture-region"),
-        CaptureMode::Screen => ("Capture Screen", "app.capture-screen"),
+        CaptureMode::Region => (tr!("Capture Region"), "app.capture-region"),
+        CaptureMode::Screen => (tr!("Capture Screen"), "app.capture-screen"),
     };
-    let empty_action = gtk::Button::with_label(empty_label);
+    let empty_action = gtk::Button::with_label(&empty_label);
     empty_action.add_css_class("suggested-action");
     empty_action.add_css_class("pill");
     empty_action.set_action_name(Some(empty_target));
@@ -383,7 +420,7 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
     status_box.set_margin_bottom(8);
     status_box.set_margin_start(12);
     status_box.set_margin_end(12);
-    let status = gtk::Label::new(Some("Ready"));
+    let status = gtk::Label::new(Some(tr!("Ready").as_str()));
     status.set_xalign(0.0);
     status.set_hexpand(true);
     status.set_ellipsize(gtk::pango::EllipsizeMode::End);
@@ -460,7 +497,7 @@ fn build_window(app: &adw::Application, cli: Cli) -> Rc<AppState> {
             if state.clipboard_owned.get() && !state.exit_after.get() {
                 window.set_visible(false);
                 state.set_status(
-                    "Snipunix is still running so the copied image stays on the clipboard.                      Use Quit to exit.",
+                    tr!("Snipunix is still running so the copied image stays on the clipboard.                      Use Quit to exit."),
                 );
                 return glib::Propagation::Stop;
             }
@@ -516,7 +553,7 @@ fn install_actions(state: &Rc<AppState>) {
             if let Some(editor) = state.editor.borrow().as_ref().cloned() {
                 editor.extract_text();
             } else {
-                state.toast("Open the annotation editor before extracting text.");
+                state.toast(tr!("Open the annotation editor before extracting text."));
             }
         }
     });
@@ -577,14 +614,16 @@ where
 
 fn start_capture(state: &Rc<AppState>, target: CaptureTarget) {
     if state.busy.get() || state.overlay_active.get() {
-        state.toast("A capture is already in progress.");
+        state.toast(tr!("A capture is already in progress."));
         return;
     }
     if target == CaptureTarget::Window
         && state.backend_preference.get() != snipunix_capture::BackendKind::X11
         && !snipunix_capture::is_x11_session()
     {
-        state.toast("Window capture needs an X11 session or the x11 backend.");
+        state.toast(tr!(
+            "Window capture needs an X11 session or the x11 backend."
+        ));
         state.quit_if_requested();
         return;
     }
@@ -599,7 +638,7 @@ fn start_capture(state: &Rc<AppState>, target: CaptureTarget) {
     }
 
     state.set_busy(true);
-    state.set_status(format!("Capturing in {delay} seconds…"));
+    state.set_status(tr_fmt!("Capturing in {0} seconds…", delay));
     let countdown_state = Rc::clone(state);
     let reduced_motion = state.settings.borrow().appearance.reduced_motion;
     let result = start_countdown(&state.app, delay, reduced_motion, move |completed| {
@@ -607,7 +646,7 @@ fn start_capture(state: &Rc<AppState>, target: CaptureTarget) {
         if completed {
             request_capture(&countdown_state, target);
         } else {
-            countdown_state.set_status("Capture cancelled.");
+            countdown_state.set_status(tr!("Capture cancelled."));
             countdown_state.quit_if_requested();
         }
     });
@@ -624,23 +663,25 @@ fn start_capture(state: &Rc<AppState>, target: CaptureTarget) {
 fn show_window_picker(state: &Rc<AppState>) {
     let backend = state.backend_preference.get();
     if backend == snipunix_capture::BackendKind::Portal || !snipunix_capture::is_x11_session() {
-        state.toast("Window capture needs an X11 session or the x11 backend.");
+        state.toast(tr!(
+            "Window capture needs an X11 session or the x11 backend."
+        ));
         return;
     }
     let windows = match snipunix_capture::X11Capture::new().list_windows() {
         Ok(windows) => windows,
         Err(error) => {
-            state.toast(format!("Could not list windows: {error}"));
+            state.toast(tr_fmt!("Could not list windows: {0}", error));
             return;
         }
     };
     if windows.is_empty() {
-        state.toast("No capturable windows were found.");
+        state.toast(tr!("No capturable windows were found."));
         return;
     }
 
     let dialog = adw::Window::builder()
-        .title("Capture Window")
+        .title(tr!("Capture Window"))
         .transient_for(&state.window)
         .modal(true)
         .default_width(620)
@@ -698,7 +739,7 @@ fn show_window_picker(state: &Rc<AppState>) {
     let close_state = Rc::clone(state);
     dialog.connect_close_request(move |_dialog| {
         if !picked.get() {
-            close_state.set_status("Window capture cancelled.");
+            close_state.set_status(tr!("Window capture cancelled."));
             close_state.quit_if_requested();
         }
         glib::Propagation::Proceed
@@ -708,11 +749,11 @@ fn show_window_picker(state: &Rc<AppState>) {
 
 fn request_capture(state: &Rc<AppState>, target: CaptureTarget) {
     if state.busy.get() || state.overlay_active.get() {
-        state.toast("A capture is already in progress.");
+        state.toast(tr!("A capture is already in progress."));
         return;
     }
     state.set_busy(true);
-    state.set_status("Capturing the screen…");
+    state.set_status(tr!("Capturing the screen…"));
     // Hide the app window so it is not part of its own screenshot. The picture
     // is shown again once the capture or overlay session finishes.
     state.window.set_visible(false);
@@ -763,15 +804,15 @@ fn default_recording_path(state: &AppState) -> PathBuf {
 /// starts a recording cropped to that rectangle on the selected monitor.
 fn start_region_recording(state: &Rc<AppState>) {
     if state.recording.borrow().is_some() {
-        state.toast("A recording is already in progress.");
+        state.toast(tr!("A recording is already in progress."));
         return;
     }
     if state.busy.get() || state.overlay_active.get() {
-        state.toast("A capture is already in progress.");
+        state.toast(tr!("A capture is already in progress."));
         return;
     }
     state.set_busy(true);
-    state.set_status("Choose a region to record…");
+    state.set_status(tr!("Choose a region to record…"));
     state.window.set_visible(false);
 
     let state = Rc::clone(state);
@@ -800,11 +841,11 @@ fn start_region_recording(state: &Rc<AppState>) {
 
 fn start_recording(state: &Rc<AppState>, region: Option<LogicalRect>) {
     if state.recording.borrow().is_some() {
-        state.toast("A recording is already in progress.");
+        state.toast(tr!("A recording is already in progress."));
         return;
     }
     if state.busy.get() || state.overlay_active.get() {
-        state.toast("A capture is already in progress.");
+        state.toast(tr!("A capture is already in progress."));
         return;
     }
 
@@ -853,7 +894,7 @@ fn start_recording(state: &Rc<AppState>, region: Option<LogicalRect>) {
         let Some(stream) = session.primary_stream() else {
             state.set_busy(false);
             state.window.present();
-            state.toast("The ScreenCast portal returned no stream.");
+            state.toast(tr!("The ScreenCast portal returned no stream."));
             session.close().await;
             return;
         };
@@ -873,11 +914,13 @@ fn start_recording(state: &Rc<AppState>, region: Option<LogicalRect>) {
                 }) else {
                     state.set_busy(false);
                     state.window.present();
-                    state.toast(
+                    state.toast(tr!(
                         "The selected region is not entirely inside the recorded monitor. \
-                         Record again and choose the monitor that contains it.",
-                    );
-                    state.set_status("The selected region does not fit the recorded monitor.");
+                         Record again and choose the monitor that contains it."
+                    ));
+                    state.set_status(tr!(
+                        "The selected region does not fit the recorded monitor."
+                    ));
                     session.close().await;
                     return;
                 };
@@ -921,12 +964,12 @@ fn start_recording(state: &Rc<AppState>, region: Option<LogicalRect>) {
                     .replace(Some(ActiveRecording { recorder, session }));
                 show_recording_indicator(&state);
                 start_recording_timer(&state);
-                state.set_status("Recording. Pause or stop from the recording window.");
+                state.set_status(tr!("Recording. Pause or stop from the recording window."));
             }
             Err(error) => {
                 state.window.present();
-                state.toast(format!("Could not start recording: {error}"));
-                state.set_status("Recording could not start.");
+                state.toast(tr_fmt!("Could not start recording: {0}", error));
+                state.set_status(tr!("Recording could not start."));
                 glib::spawn_future_local(async move {
                     session.close().await;
                 });
@@ -978,7 +1021,7 @@ fn format_elapsed(elapsed: std::time::Duration) -> String {
 
 fn show_recording_indicator(state: &Rc<AppState>) {
     let window = gtk::Window::builder()
-        .title("Snipunix Recording")
+        .title(tr!("Snipunix Recording"))
         .default_width(320)
         .resizable(false)
         .build();
@@ -993,11 +1036,11 @@ fn show_recording_indicator(state: &Rc<AppState>) {
     time.add_css_class("monospace");
     time.set_xalign(0.0);
     time.set_hexpand(true);
-    let pause = gtk::Button::with_label("Pause");
-    pause.set_tooltip_text(Some("Pause or resume the recording"));
-    let stop = gtk::Button::with_label("Stop");
+    let pause = gtk::Button::with_label(&tr!("Pause"));
+    pause.set_tooltip_text(Some(tr!("Pause or resume the recording").as_str()));
+    let stop = gtk::Button::with_label(&tr!("Stop"));
     stop.add_css_class("destructive-action");
-    stop.set_tooltip_text(Some("Stop and save the recording"));
+    stop.set_tooltip_text(Some(tr!("Stop and save the recording").as_str()));
     row.append(&dot);
     row.append(&time);
     row.append(&pause);
@@ -1047,7 +1090,7 @@ fn start_recording_timer(state: &Rc<AppState>) {
             active.recorder.take_error()
         };
         if let Some(error) = error {
-            state.toast(format!("Recording failed: {error}"));
+            state.toast(tr_fmt!("Recording failed: {0}", error));
             stop_recording(&state);
             return glib::ControlFlow::Break;
         }
@@ -1081,7 +1124,7 @@ fn toggle_recording_pause(state: &Rc<AppState>) {
                 "Recording paused."
             });
         }
-        Err(error) => state.toast(format!("Could not change the recording state: {error}")),
+        Err(error) => state.toast(tr_fmt!("Could not change the recording state: {0}", error)),
     }
 }
 
@@ -1106,17 +1149,17 @@ fn stop_recording(state: &Rc<AppState>) {
 
     match result {
         Ok(file) => {
-            state.set_status(format!("Recording saved to {}.", file.path.display()));
-            state.toast(format!(
-                "Recording saved to {} ({:.0} s, {:.1} MB).",
+            state.set_status(tr_fmt!("Recording saved to {0}.", file.path.display()));
+            state.toast(tr_fmt!(
+                "Recording saved to {0} ({1} s, {2} MB).",
                 file.path.display(),
-                file.duration.as_secs_f64(),
-                file.bytes as f64 / 1_048_576.0,
+                format!("{:.0}", file.duration.as_secs_f64()),
+                format!("{:.1}", file.bytes as f64 / 1_048_576.0)
             ));
         }
         Err(error) => {
-            state.set_status("Recording failed.");
-            state.toast(format!("Could not save the recording: {error}"));
+            state.set_status(tr!("Recording failed."));
+            state.toast(tr_fmt!("Could not save the recording: {0}", error));
         }
     }
 }
@@ -1255,7 +1298,7 @@ fn begin_overlay(
         Ok(monitors) => monitors,
         Err(error) => {
             state.window.present();
-            state.toast(format!("Could not read the monitor layout: {error}"));
+            state.toast(tr_fmt!("Could not read the monitor layout: {0}", error));
             return;
         }
     };
@@ -1263,7 +1306,7 @@ fn begin_overlay(
         Ok(layout) => layout,
         Err(error) => {
             state.window.present();
-            state.toast(format!("Could not build the monitor layout: {error}"));
+            state.toast(tr_fmt!("Could not build the monitor layout: {0}", error));
             return;
         }
     };
@@ -1278,7 +1321,7 @@ fn begin_overlay(
         Ok(mapping) => mapping,
         Err(error) => {
             state.window.present();
-            state.toast(format!("Could not map the captured image: {error}"));
+            state.toast(tr_fmt!("Could not map the captured image: {0}", error));
             return;
         }
     };
@@ -1333,7 +1376,7 @@ fn begin_overlay(
     if let Err(error) = presented {
         state.overlay_active.set(false);
         state.window.present();
-        state.toast(format!("Could not open the selection overlay: {error}"));
+        state.toast(tr_fmt!("Could not open the selection overlay: {0}", error));
     }
 }
 
@@ -1445,14 +1488,14 @@ fn commit_region(
         }
         Err(error) => {
             tracing::warn!(%error, "could not crop the region");
-            state.toast(format!("Could not crop the region: {error}"));
+            state.toast(tr_fmt!("Could not crop the region: {0}", error));
         }
     }
 }
 
 fn copy_to_clipboard(state: &AppState, image: &CapturedImage) -> bool {
     let Some(display) = gdk::Display::default() else {
-        state.toast("Could not access the display clipboard.");
+        state.toast(tr!("Could not access the display clipboard."));
         return false;
     };
     let texture = texture_from_image(image);
@@ -1472,7 +1515,7 @@ fn open_editor(state: &Rc<AppState>) {
         return;
     }
     let Some(image) = state.current.borrow().clone() else {
-        state.toast("Capture a screen or region before annotating.");
+        state.toast(tr!("Capture a screen or region before annotating."));
         return;
     };
 
@@ -1511,12 +1554,12 @@ fn open_editor(state: &Rc<AppState>) {
             state.stack.set_visible_child_name("editor");
             state.preview_bar.set_visible(false);
             state.editor.replace(Some(view));
-            state.set_status(
-                "Annotation editor ready. Scroll to zoom, middle-drag to pan, Ctrl+Z to undo.",
-            );
+            state.set_status(tr!(
+                "Annotation editor ready. Scroll to zoom, middle-drag to pan, Ctrl+Z to undo."
+            ));
         }
         Err(error) => {
-            state.toast(format!("Could not open the annotation editor: {error}"));
+            state.toast(tr_fmt!("Could not open the annotation editor: {0}", error));
         }
     }
 }
@@ -1540,12 +1583,12 @@ fn copy_current(state: &Rc<AppState>) {
         return;
     }
     let Some(image) = state.current.borrow().clone() else {
-        state.toast("There is no captured image to copy yet.");
+        state.toast(tr!("There is no captured image to copy yet."));
         return;
     };
     if copy_to_clipboard(state, &image) {
-        state.set_status(format!(
-            "Copied {} × {} to the clipboard.",
+        state.set_status(tr_fmt!(
+            "Copied {0} × {1} to the clipboard.",
             image.width(),
             image.height()
         ));
@@ -1558,7 +1601,7 @@ fn save_as(state: &Rc<AppState>) {
         return;
     }
     let Some(image) = state.current.borrow().clone() else {
-        state.toast("There is no captured image to save yet.");
+        state.toast(tr!("There is no captured image to save yet."));
         return;
     };
     let (format, quality) = {
@@ -1569,7 +1612,7 @@ fn save_as(state: &Rc<AppState>) {
         )
     };
     let dialog = gtk::FileDialog::builder()
-        .title("Save screenshot")
+        .title(tr!("Save screenshot"))
         .initial_name(default_file_name(format))
         .build();
     let filters = gio::ListStore::new::<gtk::FileFilter>();
@@ -1593,7 +1636,7 @@ fn save_as(state: &Rc<AppState>) {
         move |result| match result {
             Ok(file) => {
                 let Some(path) = file.path() else {
-                    state.toast("The selected location is not a local file.");
+                    state.toast(tr!("The selected location is not a local file."));
                     return;
                 };
                 let path = with_format_extension(path, format);
@@ -1617,7 +1660,7 @@ fn save_as(state: &Rc<AppState>) {
             }
             Err(error) => {
                 if !error.matches(gtk::DialogError::Dismissed) {
-                    state.toast(format!("Could not choose a save location: {error}"));
+                    state.toast(tr_fmt!("Could not choose a save location: {0}", error));
                 }
             }
         },
@@ -1659,11 +1702,11 @@ fn default_file_name(format: ExportFormat) -> String {
 
 fn adjust_region(state: &Rc<AppState>) {
     if state.busy.get() || state.overlay_active.get() {
-        state.toast("A capture is already in progress.");
+        state.toast(tr!("A capture is already in progress."));
         return;
     }
     let Some(context) = state.last_region.borrow().clone() else {
-        state.toast("There is no region to adjust.");
+        state.toast(tr!("There is no region to adjust."));
         return;
     };
     let options = overlay_options(state, Some(context.logical));
@@ -1736,7 +1779,7 @@ fn save_auto(state: &AppState, image: &CapturedImage) -> bool {
         path = directory.join(&name);
         suffix += 1;
         if suffix > 10_000 {
-            state.toast("Could not find a free auto-save file name.");
+            state.toast(tr!("Could not find a free auto-save file name."));
             return false;
         }
     }
@@ -1753,7 +1796,11 @@ fn save_auto(state: &AppState, image: &CapturedImage) -> bool {
             true
         }
         Err(error) => {
-            state.toast(format!("Could not auto-save {}: {error}", path.display()));
+            state.toast(tr_fmt!(
+                "Could not auto-save {0}: {1}",
+                path.display(),
+                error
+            ));
             false
         }
     }
@@ -1802,10 +1849,10 @@ fn register_shortcuts(state: &Rc<AppState>) {
     }
     state.x11_hotkeys.borrow_mut().take();
     if state.shortcut_registered.get() {
-        state.toast("Global shortcuts are already registered.");
+        state.toast(tr!("Global shortcuts are already registered."));
         return;
     }
-    state.set_status("Requesting global shortcut registration…");
+    state.set_status(tr!("Requesting global shortcut registration…"));
     let (region_trigger, screen_trigger) = {
         let settings = state.settings.borrow();
         (
@@ -1975,14 +2022,14 @@ fn handle_shortcut_event(state: &Rc<AppState>, event: ShortcutEvent) {
             state.toast(&summary);
         }
         ShortcutEvent::Failed(message) => {
-            state.set_status("Global shortcuts are not registered.");
+            state.set_status(tr!("Global shortcuts are not registered."));
             state.toast(&message);
             let parent: gtk::Window = state.window.clone().upcast();
             settings_ui::show_shortcut_help(&parent, &message);
         }
         ShortcutEvent::Activated(id) => {
             tracing::info!(shortcut = %id, "global shortcut activated");
-            state.toast(format!("Global shortcut activated: {id}"));
+            state.toast(tr_fmt!("Global shortcut activated: {0}", id));
             match id.as_str() {
                 shortcuts::REGION_SHORTCUT_ID => start_capture(state, CaptureTarget::Region),
                 shortcuts::SCREEN_SHORTCUT_ID => start_capture(state, CaptureTarget::Screen),
@@ -1990,7 +2037,7 @@ fn handle_shortcut_event(state: &Rc<AppState>, event: ShortcutEvent) {
             }
         }
         ShortcutEvent::Deactivated(id) => {
-            state.toast(format!("Global shortcut released: {id}"));
+            state.toast(tr_fmt!("Global shortcut released: {0}", id));
         }
     }
 }

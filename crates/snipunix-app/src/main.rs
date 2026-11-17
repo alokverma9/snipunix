@@ -73,6 +73,10 @@ fn real_main() -> Result<ExitCode> {
                 print_diagnostics(&cli)?;
                 return Ok(ExitCode::SUCCESS);
             }
+            if let Some(output) = cli.diagnostics_output.as_ref() {
+                write_diagnostics(&cli, output)?;
+                return Ok(ExitCode::SUCCESS);
+            }
             if cli.record_selftest {
                 run_record_selftest()?;
                 return Ok(ExitCode::SUCCESS);
@@ -336,170 +340,41 @@ fn run_record_selftest() -> Result<()> {
 /// Builds a diagnostics report from environment and backend state. It never
 /// reads screenshots, OCR text, clipboard content, or user documents.
 fn print_diagnostics(cli: &cli::Cli) -> Result<()> {
-    let mut out = String::new();
-    out.push_str("snipunix diagnostics\n");
-    out.push_str(&format!("version: {}\n", env!("CARGO_PKG_VERSION")));
-    out.push_str(&format!(
-        "platform: {} {}\n",
-        std::env::consts::OS,
-        std::env::consts::ARCH
-    ));
-    for key in [
-        "XDG_SESSION_TYPE",
-        "XDG_CURRENT_DESKTOP",
-        "XDG_SESSION_DESKTOP",
-        "WAYLAND_DISPLAY",
-        "DISPLAY",
-        "GDK_BACKEND",
-        "GDK_SCALE",
-    ] {
-        if let Ok(value) = std::env::var(key) {
-            out.push_str(&format!("{key}: {value}\n"));
-        }
-    }
-    match std::env::var("XDG_SESSION_TYPE").as_deref() {
-        Ok("wayland") if std::env::var_os("WAYLAND_DISPLAY").is_some() => {
-            out.push_str("session: Wayland desktop\n");
-        }
-        Ok("wayland") => out.push_str(
-            "warning: XDG_SESSION_TYPE=wayland but WAYLAND_DISPLAY is unset; \
-             the desktop Wayland socket is unavailable and DISPLAY may be a \
-             test or nested server\n",
-        ),
-        Ok("x11") => out.push_str("session: X11 desktop\n"),
-        Ok(other) if !other.is_empty() => out.push_str(&format!("session: {other}\n")),
-        _ => {}
-    }
-    if let Ok(release) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
-        out.push_str(&format!("kernel: {}\n", release.trim()));
-    }
-    if let Ok(os_release) = std::fs::read_to_string("/etc/os-release") {
-        for line in os_release.lines() {
-            if line.starts_with("PRETTY_NAME=") {
-                out.push_str(&format!(
-                    "distribution: {}\n",
-                    line.trim_start_matches("PRETTY_NAME=").trim_matches('"')
-                ));
-            }
-        }
-    }
-    out.push_str(&format!(
-        "auto backend: {}\n",
-        snipunix_capture::detected_backend().label()
-    ));
-    out.push_str(&format!("requested backend: {}\n", cli.backend.label()));
-
-    match async_io::block_on(snipunix_capture::probe_portal()) {
-        Ok(info) => {
-            out.push_str(&format!("screenshot portal: version {}\n", info.version));
-            match info.available_targets {
-                Some(bits) => out.push_str(&format!("screenshot targets: {bits:#x}\n")),
-                None => out.push_str("screenshot targets: unknown (v2 or older)\n"),
-            }
-        }
-        Err(error) => out.push_str(&format!("screenshot portal: unavailable ({error})\n")),
-    }
-
-    match async_io::block_on(snipunix_capture::probe_screencast()) {
-        Ok(info) => {
-            out.push_str(&format!("screencast portal: version {}\n", info.version));
-            out.push_str(&format!(
-                "screencast sources: {:#x}\n",
-                info.source_types.bits()
-            ));
-            out.push_str(&format!(
-                "screencast cursor modes: {:#x}\n",
-                info.cursor_modes.bits()
-            ));
-        }
-        Err(error) => out.push_str(&format!("screencast portal: unavailable ({error})\n")),
-    }
-
-    match snipunix_record::init() {
-        Ok(()) => {
-            let support = snipunix_record::encoder_support();
-            out.push_str(&format!("gstreamer: {}\n", snipunix_record::version()));
-            let encoders = support
-                .available
-                .iter()
-                .map(|encoder| encoder.label())
-                .collect::<Vec<_>>()
-                .join(", ");
-            out.push_str(&format!(
-                "gstreamer encoders: {}\n",
-                if encoders.is_empty() {
-                    "none"
-                } else {
-                    &encoders
-                }
-            ));
-            match support.preferred {
-                Some(encoder) => out.push_str(&format!(
-                    "gstreamer preferred encoder: {}{}\n",
-                    encoder.label(),
-                    if encoder.is_hardware() {
-                        " (hardware)"
-                    } else {
-                        ""
-                    }
-                )),
-                None => out.push_str("gstreamer preferred encoder: none\n"),
-            }
-        }
-        Err(error) => out.push_str(&format!("gstreamer: unavailable ({error})\n")),
-    }
-
-    if std::env::var_os("DISPLAY").is_some() {
-        match snipunix_capture::X11Capture::new().diagnostics() {
-            Ok(report) => out.push_str(&report),
-            Err(error) => out.push_str(&format!("X11: unavailable ({error})\n")),
-        }
-    } else {
-        out.push_str("X11: no DISPLAY\n");
-    }
-
-    let settings_path = snipunix_settings::Settings::default_path();
-    let settings = snipunix_settings::Settings::load(&settings_path).unwrap_or_default();
-    out.push_str(&format!(
-        "settings: {} ({})\n",
-        settings_path.display(),
-        if settings_path.exists() {
-            "present"
-        } else {
-            "defaults"
-        }
-    ));
-    out.push_str(&format!(
-        "capture: mode={:?} delay={} cursor={} copy={}\n",
-        settings.capture.default_mode,
-        settings.capture.delay,
-        settings.capture.include_cursor,
-        settings.capture.copy_after_capture,
-    ));
-    out.push_str(&format!(
-        "recording: fps={} bitrate={}kbps cursor={} mic={} system={} restore-token={}\n",
-        settings.recording.fps,
-        settings.recording.bitrate_kbps,
-        settings.recording.include_cursor,
-        settings.recording.microphone,
-        settings.recording.system_audio,
-        if settings.recording.restore_token.is_some() {
-            "present"
-        } else {
-            "none"
-        },
-    ));
-    match snipunix_ocr::ModelPaths::discover(settings.ocr.model_directory.clone().as_deref()) {
-        Ok(paths) => out.push_str(&format!(
-            "ocr models: {} and {}\n",
-            paths.detection.display(),
-            paths.recognition.display()
-        )),
-        Err(error) => out.push_str(&format!("ocr models: missing ({error})\n")),
-    }
-
-    print!("{out}");
+    let report = snipunix_diagnostics::collect(&snipunix_diagnostics::ReportOptions {
+        backend: cli.backend,
+        probe_x11: true,
+        crash_directory: Some(snipunix_diagnostics::crash::directory()),
+        include_translations: true,
+    });
+    print!("{}", report.to_text());
     Ok(())
+}
+
+/// Writes a diagnostics report to a file so the user can attach it to a bug
+/// report. The file contains no user content and nothing is sent anywhere.
+fn write_diagnostics(cli: &cli::Cli, output: &Path) -> Result<()> {
+    let report = snipunix_diagnostics::collect(&snipunix_diagnostics::ReportOptions {
+        backend: cli.backend,
+        probe_x11: true,
+        crash_directory: Some(snipunix_diagnostics::crash::directory()),
+        include_translations: true,
+    });
+    snipunix_diagnostics::write_report(&report, output)
+        .with_context(|| format!("failed to write {}", output.display()))?;
+    println!("Wrote diagnostics to {}", output.display());
+    Ok(())
+}
+
+/// Turns the local crash reporting on or off, following the settings.
+pub(crate) fn apply_crash_reporting(settings: &snipunix_settings::Settings) {
+    snipunix_diagnostics::crash::set_keep(settings.diagnostics.keep_crash_reports as usize);
+    snipunix_diagnostics::crash::set_enabled(settings.diagnostics.crash_reports);
+    if settings.diagnostics.crash_reports {
+        tracing::info!(
+            directory = %snipunix_diagnostics::crash::directory().display(),
+            "local crash reporting is enabled"
+        );
+    }
 }
 
 fn list_windows() -> Result<()> {

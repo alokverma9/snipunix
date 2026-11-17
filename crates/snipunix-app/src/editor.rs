@@ -12,6 +12,7 @@ use snipunix_annotate::{
     Stroke, Text, ViewTransform, save,
 };
 use snipunix_capture::CapturedImage;
+use snipunix_i18n::{tr, tr_fmt};
 use snipunix_ocr::OcrResult;
 use snipunix_settings::{SaveFormat, Settings};
 
@@ -319,11 +320,11 @@ impl EditorView {
         status.set_hexpand(true);
 
         let undo = gtk::Button::from_icon_name("edit-undo-symbolic");
-        undo.set_tooltip_text(Some("Undo (Ctrl+Z)"));
+        undo.set_tooltip_text(Some(&tr!("Undo (Ctrl+Z)")));
         let redo = gtk::Button::from_icon_name("edit-redo-symbolic");
-        redo.set_tooltip_text(Some("Redo (Ctrl+Shift+Z)"));
-        let crop_apply = gtk::Button::with_label("Apply Crop");
-        let crop_cancel = gtk::Button::with_label("Cancel Crop");
+        redo.set_tooltip_text(Some(&tr!("Redo (Ctrl+Shift+Z)")));
+        let crop_apply = gtk::Button::with_label(&tr!("Apply Crop"));
+        let crop_cancel = gtk::Button::with_label(&tr!("Cancel Crop"));
         crop_apply.set_sensitive(false);
         crop_cancel.set_sensitive(false);
 
@@ -386,7 +387,8 @@ impl EditorView {
                     self.ui.set_status(&message);
                     self.ui.toast(&message);
                 } else {
-                    self.ui.toast("Could not access the display clipboard.");
+                    self.ui
+                        .toast(&tr!("Could not access the display clipboard."));
                 }
             }
             Err(error) => self.ui.toast(&error),
@@ -397,7 +399,7 @@ impl EditorView {
         let parent = match self.root.root().and_downcast::<gtk::Window>() {
             Some(window) => window,
             None => {
-                self.ui.toast("Could not locate the editor window.");
+                self.ui.toast(&tr!("Could not locate the editor window."));
                 return;
             }
         };
@@ -408,7 +410,7 @@ impl EditorView {
         let parent = match self.root.root().and_downcast::<gtk::Window>() {
             Some(window) => window,
             None => {
-                self.ui.toast("Could not locate the editor window.");
+                self.ui.toast(&tr!("Could not locate the editor window."));
                 return;
             }
         };
@@ -518,7 +520,7 @@ fn properties_panel(inner: &Rc<RefCell<Inner>>, ui: &Ui) -> gtk::Widget {
     let color_dialog = gtk::ColorDialog::new();
     let color_button = gtk::ColorDialogButton::new(Some(color_dialog));
     color_button.set_rgba(&gdk::RGBA::new(0.88, 0.11, 0.14, 1.0));
-    color_button.set_tooltip_text(Some("Custom stroke colour"));
+    color_button.set_tooltip_text(Some(&tr!("Custom stroke colour")));
     let state = Rc::clone(inner);
     let ui_for_color = ui.clone();
     color_button.connect_rgba_notify(move |button| {
@@ -682,32 +684,34 @@ fn bottom_bar(
     bar.append(undo);
     bar.append(redo);
 
-    let zoom_out = gtk::Button::with_label("−");
-    zoom_out.set_tooltip_text(Some("Zoom out"));
-    let zoom_in = gtk::Button::with_label("+");
-    zoom_in.set_tooltip_text(Some("Zoom in"));
-    let fit = gtk::Button::with_label("Fit");
-    let actual = gtk::Button::with_label("100%");
+    let zoom_out = gtk::Button::with_label(&tr!("−"));
+    zoom_out.set_tooltip_text(Some(&tr!("Zoom out")));
+    let zoom_in = gtk::Button::with_label(&tr!("+"));
+    zoom_in.set_tooltip_text(Some(&tr!("Zoom in")));
+    let fit = gtk::Button::with_label(&tr!("Fit"));
+    let actual = gtk::Button::with_label(&tr!("100%"));
     bar.append(&zoom_out);
     bar.append(&zoom_in);
     bar.append(&fit);
     bar.append(&actual);
 
-    let reset_crop = gtk::Button::with_label("Reset Crop");
-    reset_crop.set_tooltip_text(Some("Restore the full captured image"));
+    let reset_crop = gtk::Button::with_label(&tr!("Reset Crop"));
+    reset_crop.set_tooltip_text(Some(&tr!("Restore the full captured image")));
     bar.append(&reset_crop);
     bar.append(crop_apply);
     bar.append(crop_cancel);
 
-    let copy = gtk::Button::with_label("Copy Annotated");
+    let copy = gtk::Button::with_label(&tr!("Copy Annotated"));
     copy.add_css_class("suggested-action");
-    let extract = gtk::Button::with_label("Extract Text");
-    extract.set_tooltip_text(Some("Recognise text in the current crop on this device"));
-    let export = gtk::Button::with_label("Export…");
+    let extract = gtk::Button::with_label(&tr!("Extract Text"));
+    extract.set_tooltip_text(Some(&tr!(
+        "Recognise text in the current crop on this device"
+    )));
+    let export = gtk::Button::with_label(&tr!("Export…"));
     bar.append(&copy);
     bar.append(&extract);
     bar.append(&export);
-    let close = gtk::Button::with_label("Close Editor");
+    let close = gtk::Button::with_label(&tr!("Close Editor"));
     bar.append(&close);
     bar.append(status);
 
@@ -770,7 +774,7 @@ fn bottom_bar(
             Ok(()) => {
                 state.borrow_mut().selection = None;
                 fit_view(&state);
-                ui_for_reset.set_status("Restored the full captured image.");
+                ui_for_reset.set_status(&tr!("Restored the full captured image."));
             }
             Err(error) => ui_for_reset.toast(&format!("Could not reset the crop: {error}")),
         }
@@ -785,7 +789,9 @@ fn bottom_bar(
         };
         let bounds = state.borrow().editor.document().base_bounds();
         let Some(rect) = candidate.to_pixel_rect(bounds) else {
-            ui_for_apply.toast("The crop selection is too small or outside the image.");
+            ui_for_apply.toast(&tr!(
+                "The crop selection is too small or outside the image."
+            ));
             return;
         };
         let result = state.borrow_mut().editor.set_crop(rect);
@@ -801,14 +807,14 @@ fn bottom_bar(
             }
         }
         fit_view(&state);
-        ui_for_apply.set_status("Crop applied. Undo restores the previous crop.");
+        ui_for_apply.set_status(&tr!("Crop applied. Undo restores the previous crop."));
         ui_for_apply.sync(&state);
     });
     let state = Rc::clone(inner);
     let ui_for_cancel = ui.clone();
     crop_cancel.connect_clicked(move |_| {
         state.borrow_mut().crop_candidate = None;
-        ui_for_cancel.set_status("Crop cancelled.");
+        ui_for_cancel.set_status(&tr!("Crop cancelled."));
         ui_for_cancel.sync(&state);
     });
     let state = Rc::clone(inner);
@@ -829,7 +835,7 @@ fn bottom_bar(
                     ui_for_copy.set_status(&message);
                     ui_for_copy.toast(&message);
                 } else {
-                    ui_for_copy.toast("Could not access the display clipboard.");
+                    ui_for_copy.toast(&tr!("Could not access the display clipboard."));
                 }
             }
             Err(error) => ui_for_copy.toast(&error),
@@ -1541,7 +1547,7 @@ fn open_text_dialog(
     at: DocPoint,
 ) {
     let dialog = adw::Dialog::builder()
-        .title("Text annotation")
+        .title(tr!("Text annotation"))
         .content_width(440)
         .content_height(300)
         .build();
@@ -1566,8 +1572,8 @@ fn open_text_dialog(
 
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     actions.set_halign(gtk::Align::End);
-    let cancel = gtk::Button::with_label("Cancel");
-    let save_button = gtk::Button::with_label("Save text");
+    let cancel = gtk::Button::with_label(&tr!("Cancel"));
+    let save_button = gtk::Button::with_label(&tr!("Save text"));
     save_button.add_css_class("suggested-action");
     actions.append(&cancel);
     actions.append(&save_button);
@@ -1656,7 +1662,7 @@ fn persist_editor_settings(inner: &Inner) {
 
 fn start_ocr(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Window) {
     if inner.borrow().ocr_busy.replace(true) {
-        ui.toast("Text recognition is already running.");
+        ui.toast(&tr!("Text recognition is already running."));
         return;
     }
     let previous = inner.borrow_mut().ocr.take();
@@ -1688,7 +1694,7 @@ fn start_ocr(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Window) {
     let remove_line_breaks = settings.borrow().ocr.remove_line_breaks;
     let auto_copy = settings.borrow().ocr.auto_copy;
 
-    ui.set_status("Recognising text locally…");
+    ui.set_status(&tr!("Recognising text locally…"));
     let (sender, receiver) = async_channel::bounded(1);
     std::thread::spawn(move || {
         let result = snipunix_ocr::recognize(image.rgba(), image.width(), image.height(), &models)
@@ -1707,8 +1713,8 @@ fn start_ocr(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Window) {
         inner.borrow().ocr_busy.set(false);
         match result {
             Ok(result) if result.is_empty() => {
-                ui.set_status("No text was recognised in the current crop.");
-                ui.toast("No text was recognised in the current crop.");
+                ui.set_status(&tr!("No text was recognised in the current crop."));
+                ui.toast(&tr!("No text was recognised in the current crop."));
             }
             Ok(result) => {
                 if auto_copy {
@@ -1724,7 +1730,7 @@ fn start_ocr(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Window) {
                 show_ocr_dialog(&inner, &ui, &parent, result, origin);
             }
             Err(error) => {
-                ui.set_status("Text recognition failed.");
+                ui.set_status(&tr!("Text recognition failed."));
                 ui.toast(&format!("Text recognition failed: {error}"));
             }
         }
@@ -1733,15 +1739,16 @@ fn start_ocr(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Window) {
 
 fn prompt_download_models(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Window, detail: &str) {
     let dialog = adw::MessageDialog::builder()
-        .heading("Text recognition needs a local model")
-        .body(format!(
-            "OCR runs on this device. Snipunix needs two model files (about 12 MB).\n\n{detail}"
+        .heading(tr!("Text recognition needs a local model"))
+        .body(tr_fmt!(
+            "OCR runs on this device. Snipunix needs two model files (about 12 MB).\n\n{0}",
+            detail
         ))
         .transient_for(parent)
         .modal(true)
         .build();
-    dialog.add_response("cancel", "Cancel");
-    dialog.add_response("download", "Download Models");
+    dialog.add_response("cancel", &tr!("Cancel"));
+    dialog.add_response("download", &tr!("Download Models"));
     dialog.set_response_appearance("download", adw::ResponseAppearance::Suggested);
     dialog.set_default_response(Some("cancel"));
     dialog.set_close_response("cancel");
@@ -1750,11 +1757,13 @@ fn prompt_download_models(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Win
     let parent = parent.clone();
     glib::spawn_future_local(async move {
         if dialog.choose_future().await != "download" {
-            ui.set_status("Text recognition cancelled: the OCR models are not installed.");
+            ui.set_status(&tr!(
+                "Text recognition cancelled: the OCR models are not installed."
+            ));
             return;
         }
         let directory = inner.borrow().settings.borrow().model_directory();
-        ui.set_status("Downloading and verifying OCR models…");
+        ui.set_status(&tr!("Downloading and verifying OCR models…"));
         let (sender, receiver) = async_channel::bounded(1);
         std::thread::spawn(move || {
             let result = snipunix_ocr::download_models(&directory)
@@ -1764,14 +1773,14 @@ fn prompt_download_models(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Win
         });
         match receiver.recv().await {
             Ok(Ok(())) => {
-                ui.toast("OCR models installed.");
+                ui.toast(&tr!("OCR models installed."));
                 start_ocr(&inner, &ui, &parent);
             }
             Ok(Err(error)) => {
-                ui.set_status("Could not install OCR models.");
+                ui.set_status(&tr!("Could not install OCR models."));
                 ui.toast(&format!("Could not install OCR models: {error}"));
             }
-            Err(_) => ui.toast("The OCR model download stopped unexpectedly."),
+            Err(_) => ui.toast(&tr!("The OCR model download stopped unexpectedly.")),
         }
     });
 }
@@ -1784,7 +1793,7 @@ fn show_ocr_dialog(
     origin: DocPoint,
 ) {
     let window = adw::Window::builder()
-        .title("Extracted text")
+        .title(tr!("Extracted text"))
         .transient_for(parent)
         .modal(false)
         .default_width(620)
@@ -1841,13 +1850,13 @@ fn show_ocr_dialog(
     };
     let redact = gtk::Button::with_label(&redact_label);
     redact.set_sensitive(detected > 0);
-    redact.set_tooltip_text(Some(
-        "Cover detected emails and phone numbers with opaque black",
-    ));
+    redact.set_tooltip_text(Some(&tr!(
+        "Cover detected emails and phone numbers with opaque black"
+    )));
 
-    let copy = gtk::Button::with_label("Copy All");
+    let copy = gtk::Button::with_label(&tr!("Copy All"));
     copy.add_css_class("suggested-action");
-    let close = gtk::Button::with_label("Close");
+    let close = gtk::Button::with_label(&tr!("Close"));
     let status = gtk::Label::new(Some(&format!(
         "{} line(s) recognised locally.",
         result.lines.len()
@@ -1942,14 +1951,14 @@ fn show_ocr_dialog(
                 })
                 .unwrap_or_default();
             if text.is_empty() {
-                ui.toast("There is no recognised text to copy.");
+                ui.toast(&tr!("There is no recognised text to copy."));
                 return;
             }
             if copy_text_to_clipboard(&text) {
-                ui.set_status("Copied recognised text to the clipboard.");
-                ui.toast("Copied recognised text to the clipboard.");
+                ui.set_status(&tr!("Copied recognised text to the clipboard."));
+                ui.toast(&tr!("Copied recognised text to the clipboard."));
             } else {
-                ui.toast("Could not access the display clipboard.");
+                ui.toast(&tr!("Could not access the display clipboard."));
             }
         });
     }
@@ -1959,7 +1968,7 @@ fn show_ocr_dialog(
         redact.connect_clicked(move |_| {
             let applied = apply_ocr_redactions(&inner);
             match applied {
-                Ok(0) => ui.toast("No emails or phone numbers were detected."),
+                Ok(0) => ui.toast(&tr!("No emails or phone numbers were detected.")),
                 Ok(count) => {
                     let message = format!(
                         "Redacted {count} detected region(s) with opaque black. The black fill is part of the image output."
@@ -2070,16 +2079,16 @@ fn export_to(
 ) -> Result<(), String> {
     if path.exists() {
         let dialog = adw::MessageDialog::builder()
-            .heading("Replace existing file?")
-            .body(format!(
-                "{} already exists. Replacing it removes the old file.",
+            .heading(tr!("Replace existing file?"))
+            .body(tr_fmt!(
+                "{0} already exists. Replacing it removes the old file.",
                 path.display()
             ))
             .transient_for(parent)
             .modal(true)
             .build();
-        dialog.add_response("cancel", "Cancel");
-        dialog.add_response("replace", "Replace");
+        dialog.add_response("cancel", &tr!("Cancel"));
+        dialog.add_response("replace", &tr!("Replace"));
         dialog.set_response_appearance("replace", adw::ResponseAppearance::Destructive);
         dialog.set_default_response(Some("cancel"));
         dialog.set_close_response("cancel");
@@ -2089,7 +2098,7 @@ fn export_to(
         glib::spawn_future_local(async move {
             let response = dialog.choose_future().await;
             if response != "replace" {
-                ui.set_status("Export cancelled.");
+                ui.set_status(&tr!("Export cancelled."));
                 return;
             }
             write_export(&inner, &ui, &path, format);
@@ -2151,7 +2160,7 @@ fn open_export_dialog_impl(inner: &Rc<RefCell<Inner>>, ui: &Ui, parent: &gtk::Wi
                 }
             };
             let Some(path) = file.path() else {
-                ui.toast("The selected export location is not a local file.");
+                ui.toast(&tr!("The selected export location is not a local file."));
                 return;
             };
             let path = with_format_extension(path, format);

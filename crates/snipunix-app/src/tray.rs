@@ -7,6 +7,7 @@
 use ksni::blocking::{Handle, TrayMethods};
 use ksni::menu::StandardItem;
 use ksni::{MenuItem, Tray};
+use snipunix_i18n::tr;
 
 /// Commands emitted by tray interactions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,13 +66,13 @@ impl Tray for SnipunixTray {
             .into()
         };
         vec![
-            item("Capture Region", TrayCommand::CaptureRegion),
-            item("Capture Screen", TrayCommand::CaptureScreen),
+            item(&tr!("Capture Region"), TrayCommand::CaptureRegion),
+            item(&tr!("Capture Screen"), TrayCommand::CaptureScreen),
             MenuItem::Separator,
-            item("Show Snipunix", TrayCommand::Show),
-            item("Settings…", TrayCommand::Settings),
+            item(&tr!("Show Snipunix"), TrayCommand::Show),
+            item(&tr!("Settings…"), TrayCommand::Settings),
             MenuItem::Separator,
-            item("Quit", TrayCommand::Quit),
+            item(&tr!("Quit"), TrayCommand::Quit),
         ]
     }
 }

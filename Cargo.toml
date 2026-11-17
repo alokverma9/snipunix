@@ -8,11 +8,13 @@ members = [
     "crates/snipunix-ocr",
     "crates/snipunix-overlay",
     "crates/snipunix-record",
+    "crates/snipunix-i18n",
+    "crates/snipunix-diagnostics",
     "crates/snipunix-app",
 ]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-or-later"
@@ -20,13 +22,15 @@ authors = ["Snipunix contributors"]
 repository = "https://github.com/alokverma9/snipunix"
 
 [workspace.dependencies]
-snipunix-core = { path = "crates/snipunix-core" }
-snipunix-capture = { path = "crates/snipunix-capture" }
-snipunix-annotate = { path = "crates/snipunix-annotate" }
-snipunix-settings = { path = "crates/snipunix-settings" }
-snipunix-ocr = { path = "crates/snipunix-ocr" }
-snipunix-overlay = { path = "crates/snipunix-overlay" }
-snipunix-record = { path = "crates/snipunix-record" }
+snipunix-core = { path = "crates/snipunix-core", version = "0.6.0" }
+snipunix-capture = { path = "crates/snipunix-capture", version = "0.6.0" }
+snipunix-annotate = { path = "crates/snipunix-annotate", version = "0.6.0" }
+snipunix-settings = { path = "crates/snipunix-settings", version = "0.6.0" }
+snipunix-ocr = { path = "crates/snipunix-ocr", version = "0.6.0" }
+snipunix-overlay = { path = "crates/snipunix-overlay", version = "0.6.0" }
+snipunix-record = { path = "crates/snipunix-record", version = "0.6.0" }
+snipunix-i18n = { path = "crates/snipunix-i18n", version = "0.6.0" }
+snipunix-diagnostics = { path = "crates/snipunix-diagnostics", version = "0.6.0" }
 
 gtk = { package = "gtk4", version = "0.11.5", features = ["v4_12"] }
 gdk = { package = "gdk4", version = "0.11.5" }
@@ -77,6 +81,7 @@ x11rb = { version = "0.14", default-features = false, features = [
 ] }
 gstreamer = { version = "0.24.5", default-features = false, features = ["v1_24"] }
 ctrlc = "3.4"
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 
 [profile.release]
 lto = "thin"
