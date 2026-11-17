@@ -84,6 +84,8 @@ pub struct Cli {
     pub list_windows: bool,
     /// Print a telemetry-free diagnostics report and exit.
     pub diagnostics: bool,
+    /// Write a diagnostics report to a file and exit.
+    pub diagnostics_output: Option<PathBuf>,
     /// Record a screen, region, or window instead of taking a screenshot.
     pub record: Option<CaptureTarget>,
     /// Stop recording after this many seconds. `0` records until Ctrl+C.
@@ -168,6 +170,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<ParseResult, Stri
             "--include-cursor" => cli.include_cursor = true,
             "--list-windows" => cli.list_windows = true,
             "--diagnostics" => cli.diagnostics = true,
+            "--diagnostics-output" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--diagnostics-output requires a file path".to_string())?;
+                cli.diagnostics_output = Some(PathBuf::from(value));
+            }
             "--record-selftest" => cli.record_selftest = true,
             "--record-no-cursor" => cli.record_no_cursor = true,
             "--record" => {
@@ -299,6 +307,7 @@ OPTIONS:
     --window <ID>               X11 window ID for `--capture window`.
     --list-windows              List capturable X11 windows and exit.
     --diagnostics               Print a telemetry-free diagnostics report.
+    --diagnostics-output <PATH> Write a diagnostics report to PATH and exit.
     --include-cursor            Draw the pointer into the capture (X11).
     --record <screen|region>
                                 Record instead of taking a screenshot.

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Current settings schema version.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 /// Default delay range, in seconds.
 pub const MAX_DELAY_SECONDS: u32 = 10;
 /// Default filename template, expanded with `glib::DateTime`.
@@ -42,6 +42,7 @@ pub struct Settings {
     pub ocr: OcrSettings,
     pub appearance: AppearanceSettings,
     pub recording: RecordingSettings,
+    pub diagnostics: DiagnosticsSettings,
 }
 
 impl Default for Settings {
@@ -55,6 +56,7 @@ impl Default for Settings {
             ocr: OcrSettings::default(),
             appearance: AppearanceSettings::default(),
             recording: RecordingSettings::default(),
+            diagnostics: DiagnosticsSettings::default(),
         }
     }
 }
@@ -160,6 +162,7 @@ impl Settings {
         {
             self.recording.restore_token = None;
         }
+        self.diagnostics.keep_crash_reports = self.diagnostics.keep_crash_reports.clamp(1, 100);
     }
 
     /// Directory for finished recordings.
@@ -363,6 +366,28 @@ impl Default for AppearanceSettings {
     }
 }
 
+/// Diagnostics and crash reporting.
+///
+/// Crash reporting is **off by default**. The application never writes a
+/// crash report to disk until the user turns this on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiagnosticsSettings {
+    /// Write a local crash report when the application panics.
+    pub crash_reports: bool,
+    /// How many crash reports to keep on disk.
+    pub keep_crash_reports: u32,
+}
+
+impl Default for DiagnosticsSettings {
+    fn default() -> Self {
+        Self {
+            crash_reports: false,
+            keep_crash_reports: 10,
+        }
+    }
+}
+
 /// Settings storage errors.
 #[derive(Debug, Error)]
 pub enum SettingsError {
@@ -472,6 +497,8 @@ mod tests {
         assert!(!settings.recording.microphone);
         assert!(!settings.recording.system_audio);
         assert!(settings.recording.restore_token.is_none());
+        assert!(!settings.diagnostics.crash_reports);
+        assert_eq!(settings.diagnostics.keep_crash_reports, 10);
     }
 
     #[test]
@@ -495,6 +522,8 @@ mod tests {
         settings.recording.microphone = true;
         settings.recording.system_audio = true;
         settings.recording.restore_token = Some("token-123".to_string());
+        settings.diagnostics.crash_reports = true;
+        settings.diagnostics.keep_crash_reports = 3;
 
         let text = settings.to_toml().unwrap();
         let parsed = Settings::from_toml(&text).unwrap();
@@ -566,6 +595,7 @@ mod tests {
         settings.recording.fps = 1;
         settings.recording.bitrate_kbps = 1;
         settings.recording.restore_token = Some("   ".to_string());
+        settings.diagnostics.keep_crash_reports = 0;
         settings.sanitize();
         assert_eq!(settings.capture.delay, MAX_DELAY_SECONDS);
         assert_eq!(settings.files.jpeg_quality, 1);
@@ -576,6 +606,7 @@ mod tests {
         assert_eq!(settings.recording.fps, MIN_RECORDING_FPS);
         assert_eq!(settings.recording.bitrate_kbps, MIN_RECORDING_BITRATE_KBPS);
         assert!(settings.recording.restore_token.is_none());
+        assert_eq!(settings.diagnostics.keep_crash_reports, 1);
     }
 
     #[test]

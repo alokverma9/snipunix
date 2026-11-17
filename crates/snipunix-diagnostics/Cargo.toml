@@ -1,0 +1,20 @@
+[package]
+name = "snipunix-diagnostics"
+description = "Local diagnostics reporting and opt-in crash capture for Snipunix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+snipunix-capture.workspace = true
+snipunix-ocr.workspace = true
+snipunix-record.workspace = true
+snipunix-settings.workspace = true
+snipunix-i18n.workspace = true
+async-io.workspace = true
+thiserror.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
