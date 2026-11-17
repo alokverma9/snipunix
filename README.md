@@ -110,9 +110,6 @@ scripts/check-release.sh
 It runs the formatting check, clippy with warnings denied, the test suite, the
 translation catalogue check, and `cargo deny`.
 
-See [M5 test evidence](docs/M5_TEST_EVIDENCE.md) for commands, ffprobe
-output, CPU measurements, and the verification gaps.
-
 ### Benchmarks
 
 ```sh
@@ -120,8 +117,7 @@ cargo bench --workspace --benches
 ```
 
 The benchmarks cover the decode, crop, PNG encode, rasterise, and export
-paths. The measured numbers on the test host are in
-[M6 test evidence](docs/M6_TEST_EVIDENCE.md).
+paths.
 
 ### Translations
 
@@ -699,22 +695,7 @@ docs/                     Architecture, dependencies, test evidence
 **For developers and packagers**
 
 - [Security](docs/SECURITY.md)
-- [M6 test evidence](docs/M6_TEST_EVIDENCE.md)
-- [M5 implementation plan](docs/M5_IMPLEMENTATION_PLAN.md)
-- [M5 test evidence](docs/M5_TEST_EVIDENCE.md)
-- [M3 architecture](docs/M3_ARCHITECTURE.md)
-- [M3 implementation plan](docs/M3_IMPLEMENTATION_PLAN.md)
-- [M3 test evidence](docs/M3_TEST_EVIDENCE.md)
-- [M3 completion report](M3_COMPLETION_REPORT.md)
-- [M2 architecture](docs/M2_ARCHITECTURE.md),
-  [plan](docs/M2_IMPLEMENTATION_PLAN.md), and
-  [test evidence](docs/M2_TEST_EVIDENCE.md) (historical)
-- [M1 architecture](docs/M1_ARCHITECTURE.md) and
-  [M1 test evidence](docs/M1_TEST_EVIDENCE.md) (historical)
-- [M0 architecture](docs/M0_ARCHITECTURE.md) and
-  [M0 test evidence](docs/M0_TEST_EVIDENCE.md) (historical)
 - [Dependencies and licenses](docs/DEPENDENCIES.md)
-- Phase 0 research reports remain in `research/`.
 
 ## License
 
