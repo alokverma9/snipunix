@@ -3,22 +3,25 @@
 **Screenshot. Record. Annotate.**
 
 Snipunix is a Linux screenshot and screen-recording tool built for GNOME
-Wayland. This repository is the **M5 product**: portal capture and ScreenCast
-recording, a frozen-image region overlay with move/resize handles, a magnifier,
-a delay countdown, clipboard copy, Save As, Adjust Region, a non-destructive
-annotation editor with PNG/JPEG/WebP export, local OCR with text extraction and
-opaque redaction, H.264 MP4/Matroska recording of a monitor or region with
-optional microphone/system audio, persisted settings, rebindable global
-shortcuts, a best-effort tray, first-run onboarding, and Flatpak/deb packages.
+Wayland. This repository is the **M6 release candidate**: portal capture and
+ScreenCast recording, a frozen-image region overlay with move/resize handles, a
+magnifier, a delay countdown, clipboard copy, Save As, Adjust Region, a
+non-destructive annotation editor with PNG/JPEG/WebP export, local OCR with text
+extraction and opaque redaction, H.264 MP4/Matroska recording of a monitor or
+region with optional microphone/system audio, persisted settings, rebindable
+global shortcuts, a best-effort tray, first-run onboarding, German and Spanish
+translations, a local diagnostics export, opt-in crash reports, a Flatpak beta
+channel, and Flatpak/deb packages.
 
 Everything stays on the device. OCR uses a local ONNX model, and no screenshot
 or recognised text is sent anywhere. The only network operation is an explicit,
 user-initiated OCR model download for host builds that do not already have the
-models installed.
+models installed. The promise is checked by a test and by a packet capture; see
+[docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Status
 
-| Area | M5 state |
+| Area | M6 state |
 | --- | --- |
 | Full-screen capture | Works through `org.freedesktop.portal.Screenshot` v2 |
 | Headless CLI capture | `snipunix --capture screen --output PATH` |
@@ -40,11 +43,16 @@ models installed.
 | Onboarding | First-run permission priming, shortcut setup, save folder, privacy summary |
 | Global shortcuts | Configured triggers, returned-description display, rebind, failure guidance |
 | Tray | Best-effort StatusNotifierItem: capture, show, settings, quit |
-| Packaging | Flatpak manifest and `snipunix_0.4.0_amd64.deb`; recording needs GStreamer runtime |
+| Translations | German and Spanish, gettext catalogues embedded in the binary |
+| Diagnostics | `snipunix --diagnostics`, `--diagnostics-output PATH`, and an export in Settings |
+| Crash reports | Local files, **off by default**, never leave the device |
+| Beta channel | `io.github.alokverma9.snipunix.Beta`, installable next to the stable release |
+| Packaging | Flatpak manifest, `snipunix_0.6.0_amd64.deb`; recording needs GStreamer runtime |
 | X11 recording / GIF export / live streaming / cloud / AI / telemetry / background service | Not implemented (out of scope) |
 
 Tested on Ubuntu 26.04, GNOME 50.1, Wayland, one 1920×1080 monitor with GStreamer
-1.28.2 and x264. See [Known limitations](#known-limitations) before relying on
+1.28.2 and x264. See [Known limitations](#known-limitations) and
+[docs/PLATFORM_LIMITATIONS.md](docs/PLATFORM_LIMITATIONS.md) before relying on
 any behaviour.
 
 ## Requirements
@@ -82,9 +90,9 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-M5 has **155 passing tests**: 43 annotation, 32 core, 21 capture, 25 record,
-11 app, 9 OCR, 9 settings, 3 fuzz, and 2 overlay. The two model-gated OCR
-tests need the pinned models:
+M6 has **176 passing tests**: 43 annotation, 32 core, 25 record, 21 capture,
+12 i18n, 11 app, 9 OCR, 9 settings, 3 fuzz, 3 no-network, and 2 overlay. The two
+model-gated OCR tests need the pinned models:
 
 ```sh
 SNIPUNIX_OCR_TEST_MODELS=/path/to/models cargo test --workspace
@@ -93,8 +101,54 @@ SNIPUNIX_OCR_TEST_MODELS=/path/to/models cargo test --workspace
 The recording tests include a real GStreamer encode and a pause/resume
 round-trip; they skip cleanly when `x264enc` is not installed.
 
+The full local release gate is one command:
+
+```sh
+scripts/check-release.sh
+```
+
+It runs the formatting check, clippy with warnings denied, the test suite, the
+translation catalogue check, and `cargo deny`.
+
 See [M5 test evidence](docs/M5_TEST_EVIDENCE.md) for commands, ffprobe
 output, CPU measurements, and the verification gaps.
+
+### Benchmarks
+
+```sh
+cargo bench --workspace --benches
+```
+
+The benchmarks cover the decode, crop, PNG encode, rasterise, and export
+paths. The measured numbers on the test host are in
+[M6 test evidence](docs/M6_TEST_EVIDENCE.md).
+
+### Translations
+
+The interface is translated into German and Spanish. The catalogues follow the
+GNU gettext conventions and are embedded in the binary.
+
+```sh
+scripts/i18n.sh extract   # regenerate po/snipunix.pot from the sources
+scripts/i18n.sh merge     # merge the template into every po/<lang>.po
+scripts/i18n.sh compile   # compile the catalogues into the embedded .mo files
+scripts/i18n.sh check     # verify the committed catalogues are up to date
+```
+
+`msgfmt` and `msgmerge` come from GNU gettext (`sudo apt install gettext`).
+`tools/i18n-translations.py` holds the translation tables; adding a language is
+one entry in that file.
+
+### Diagnostics and crash reports
+
+```sh
+snipunix --diagnostics                  # print a report
+snipunix --diagnostics-output report.txt  # write a report to a file
+```
+
+Crash reports are a local file, **off by default**, and are enabled in
+Settings → About. They never leave the device. See
+[docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Run
 
@@ -484,6 +538,37 @@ lifetime.
 Stop any host `snipunix` process before launching the Flatpak: both use the same
 application ID, so the host instance would receive the activation.
 
+### Beta channel
+
+The beta channel is a second Flatpak with the application ID
+`io.github.alokverma9.snipunix.Beta`. It installs next to the stable release,
+keeps its own settings, and gets its own portal permissions, so the two never
+interfere.
+
+```sh
+scripts/build-flatpak.sh beta
+flatpak-builder --user --install --force-clean \
+    .flatpak-builder/build/io.github.alokverma9.snipunix.Beta \
+    flatpak/io.github.alokverma9.snipunix.Beta.json
+flatpak run io.github.alokverma9.snipunix.Beta
+```
+
+The beta build marks itself in the window subtitle so it is never mistaken for
+the stable release.
+
+`scripts/publish-flatpak.sh beta <remote>` exports the channel to an OSTree
+repository that users can follow with:
+
+```sh
+flatpak remote-add --user --if-not-exists snipunix-beta <remote>
+flatpak install snipunix-beta io.github.alokverma9.snipunix.Beta
+```
+
+Feedback is collected offline: the user exports a diagnostics report from
+Settings → About, or runs `snipunix --diagnostics-output report.txt`, and
+attaches it to an issue. The report contains no screen content and no
+recognised text. Nothing is sent automatically.
+
 ### deb
 
 ```sh
@@ -603,6 +688,18 @@ docs/                     Architecture, dependencies, test evidence
 
 ## Documentation
 
+**For users**
+
+- [User guide](docs/USER_GUIDE.md)
+- [Keyboard shortcuts](docs/SHORTCUTS.md)
+- [Platform limitations](docs/PLATFORM_LIMITATIONS.md)
+- [Privacy](docs/PRIVACY.md)
+- [Release notes](docs/RELEASE_NOTES.md)
+
+**For developers and packagers**
+
+- [Security](docs/SECURITY.md)
+- [M6 test evidence](docs/M6_TEST_EVIDENCE.md)
 - [M5 implementation plan](docs/M5_IMPLEMENTATION_PLAN.md)
 - [M5 test evidence](docs/M5_TEST_EVIDENCE.md)
 - [M3 architecture](docs/M3_ARCHITECTURE.md)

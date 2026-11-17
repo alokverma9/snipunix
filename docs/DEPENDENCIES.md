@@ -11,6 +11,11 @@ bindings (`gstreamer`), a Ctrl+C handler for headless recordings (`ctrlc`), and
 the `snipunix-record` workspace crate. The `ashpd` `screencast` feature enables
 the PipeWire ScreenCast portal client.
 
+M6 adds the benchmark harness (`criterion`, a development dependency only) and
+two workspace crates: `snipunix-i18n`, which reads the gettext catalogues with
+no additional dependency, and `snipunix-diagnostics`, which reports the
+environment and captures local crash reports.
+
 The OCR path and tray are pure Rust. `ureq` is only used by the explicit
 `--download-ocr-models` path and brings an HTTP/TLS stack; it is not used during
 capture, OCR, or normal startup. Fontconfig is read at runtime from the
@@ -28,6 +33,7 @@ host/runtime fonts and adds no build dependency.
 | `ashpd` | 0.14.0 | MIT | Screenshot, ScreenCast, and GlobalShortcuts portal clients |
 | `gstreamer` | 0.24.5 | MIT | In-process PipeWire consumption, H.264 encoding, MP4/Matroska muxing |
 | `ctrlc` | 3.5.2 | MIT OR Apache-2.0 | Ctrl+C stop for headless recordings |
+| `criterion` | 0.8.2 | MIT OR Apache-2.0 | Benchmark harness for the capture and export pipelines (development only) |
 | `image` | 0.25.10 | MIT OR Apache-2.0 | PNG/JPEG decode and PNG/JPEG/WebP encode |
 | `tiny-skia` | 0.12.0 | BSD-3-Clause | CPU vector rasteriser for annotations and export |
 | `cosmic-text` | 0.19.0 | MIT OR Apache-2.0 | Multiline text shaping and layout |
